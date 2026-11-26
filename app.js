@@ -61,7 +61,16 @@ function dbErr(e) {
 const S = {user:null, admin:false, rets:[], rid:null, ret:null, prog:[], rooms:[], ins:[], orgs:[], me:null, myRets:[], q:'', fStat:'', toolsKey:'', editing:null};
 let unsubs = [], retUnsub = null, orgUnsub = null;
 const stopAll = () => { unsubs.forEach(u => u()); unsubs = []; retUnsub && retUnsub(); retUnsub = null; orgUnsub && orgUnsub(); orgUnsub = null };
-const V = () => S.admin ? V_ADMIN : V_PART;
+const ADM = () => S.admin && !S.preview;          // vue organisateur (hors aperçu)
+const V = () => ADM() ? V_ADMIN : V_PART;
+// Personne affichée côté retraitant : soi-même, ou en aperçu un inscrit / un exemple.
+function ME() {
+  if (!S.preview) return S.me;
+  const i = S.ins.find(x => x.id === S.pv);
+  if (i) return {...i, sexe: i.sexe || 'H'};
+  const f = S.pv === 'demoF';
+  return {id: 'exemple', email: 'exemple@paroisse.fr', prenom: f ? 'Marie' : 'Jean', nom: 'Exemple', sexe: f ? 'F' : 'H', naissance: '1990-06-15', statut: 'Confirmée', montant: 0, chambreId: ''};
+}
 const view = () => { const h = location.hash.slice(1); return V()[h] ? h : Object.keys(V())[0] };
 
 /* ---------- écrans d'accueil ---------- */
@@ -149,7 +158,7 @@ function howTo() {
 addEventListener('beforeinstallprompt', e => { e.preventDefault(); S.installEvt = e });
 
 /* ---------- démarrage selon l'utilisateur ---------- */
-onAuthStateChanged(auth, u => { stopAll(); Object.assign(S, {user: u, admin: false, resp: false, rid: null, ret: null, me: null, rets: [], myRets: [], ins: [], rooms: [], prog: [], orgs: [], toolsKey: ''}); if (!u) return loginScreen(); start(u) });
+onAuthStateChanged(auth, u => { stopAll(); Object.assign(S, {user: u, admin: false, resp: false, preview: false, pv: 'demoH', rid: null, ret: null, me: null, rets: [], myRets: [], ins: [], rooms: [], prog: [], orgs: [], toolsKey: ''}); if (!u) return loginScreen(); start(u) });
 
 async function start(u) {
   if (!u.emailVerified) return verifyScreen(u);
@@ -220,22 +229,28 @@ function render() {
   pick.hidden = !(S.admin ? list.length : list.length > 1);
   pick.innerHTML = [...list].sort((a, b) => (a.debut || '').localeCompare(b.debut || '')).map(x => `<option value="${esc(x.id)}"${x.id === S.rid ? ' selected' : ''}>${esc(x.titre)} — ${fmt(x.debut, {day:'numeric', month:'short', year:'numeric'})}</option>`).join('');
   $('#whoami').textContent = S.admin ? (S.resp ? 'Responsable' : 'Organisateur') : (S.me ? name(S.me) : '');
+  const pb = $('#pvbtn'); pb.hidden = !S.admin; pb.textContent = S.preview ? 'Quitter l’aperçu' : 'Aperçu retraitant'; pb.classList.toggle('on', S.preview);
+  const bar = $('#pvbar'); bar.hidden = !S.preview;
+  if (S.preview) {
+    const C = S.ins.filter(i => i.statut === 'Confirmée').sort(byName);
+    bar.innerHTML = `<div class="wrap pvin"><b>Mode aperçu</b><span>L’application telle que la voit</span><select id="pvsel" aria-label="Voir l’application comme"><option value="demoH"${S.pv === 'demoH' ? ' selected' : ''}>un retraitant (exemple homme)</option><option value="demoF"${S.pv === 'demoF' ? ' selected' : ''}>une retraitante (exemple femme)</option>${C.length ? `<optgroup label="Inscrits confirmés">${C.map(i => `<option value="${esc(i.id)}"${S.pv === i.id ? ' selected' : ''}>${esc(name(i))}${i.sexe ? '' : ' (fiche non remplie)'}</option>`).join('')}</optgroup>` : ''}</select><span class="dim2">Lecture seule : aucune action n’est enregistrée.</span></div>`;
+  }
   $('#hero').innerHTML = hero(r);
   $('#tabs').innerHTML = Object.entries(V()).map(([k, l]) => `<a href="#${k}" aria-label="${l}" title="${l}"${k === v ? ' aria-current="page"' : ''}><svg viewBox="0 0 24 24" aria-hidden="true">${ICO[k]}</svg></a>`).join('');
   if (!r && !['retraites', 'equipe'].includes(v)) {
     S.toolsKey = ''; $('#tools').innerHTML = '';
-    $('#list').innerHTML = S.admin ? '<div class="empty"><h3>Aucune retraite</h3><p>Commencez par créer la première retraite.</p><button class="pri" data-new="retraites">Créer une retraite</button></div>' : '';
+    $('#list').innerHTML = ADM() ? '<div class="empty"><h3>Aucune retraite</h3><p>Commencez par créer la première retraite.</p><button class="pri" data-new="retraites">Créer une retraite</button></div>' : '';
     return;
   }
-  ({accueil: vHome, inscriptions: vInscr, programme: vProg, chambres: S.admin ? vRoomsAdmin : vRoomsPart, infos: vInfos, retraites: vRet, equipe: vTeam})[v](r);
+  ({accueil: vHome, inscriptions: vInscr, programme: vProg, chambres: ADM() ? vRoomsAdmin : vRoomsPart, infos: vInfos, retraites: vRet, equipe: vTeam})[v](r);
 }
-function tools(key, html) { if (S.toolsKey !== key) { S.toolsKey = key; $('#tools').innerHTML = html } }
+function tools(key, html) { key = (S.preview ? 'pv' + S.pv : '') + key; if (S.toolsKey !== key) { S.toolsKey = key; $('#tools').innerHTML = html } }
 
 function hero(r) {
-  if (!r) return `<h1>${S.admin ? 'Espace organisateurs' : 'Bienvenue'}</h1>`;
+  if (!r) return `<h1>${ADM() ? 'Espace organisateurs' : 'Bienvenue'}</h1>`;
   const nuits = Math.max(0, Math.round((new Date(r.fin) - new Date(r.debut)) / 864e5));
   const head = `${!S.admin && S.me ? `<p class="welcome">Bienvenue, <b>${esc(name(S.me))}</b></p>` : `<p class="kick">${S.admin ? 'ESPACE ORGANISATEURS' : 'RETRAITE SPIRITUELLE'}</p>`}<h1>${esc(r.titre)}</h1><p class="meta">${r.theme ? `<span>${esc(r.theme)}</span>` : ''}<span>${fmt(r.debut, {day:'numeric', month:'long'})} → ${fmt(r.fin)}${nuits ? ` · ${nuits} nuit${nuits > 1 ? 's' : ''}` : ''}</span>${r.lieu ? `<span>${esc(r.lieu)}</span>` : ''}${r.animateur ? `<span>Prêchée par ${esc(r.animateur)}</span>` : ''}</p>`;
-  if (!S.admin) return `<div class="hello"><p class="hello-k">Bienvenue</p><p class="hello-n">${esc(S.me ? name(S.me) : '')}</p><div class="hello-r"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#copte"/></svg><span>${esc(r.titre)}</span><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#copte"/></svg></div></div>`;
+  if (!ADM()) return `<div class="hello"><p class="hello-k">Bienvenue</p><p class="hello-n">${esc(ME() ? name(ME()) : '')}</p><div class="hello-r"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#copte"/></svg><span>${esc(r.titre)}</span><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#copte"/></svg></div></div>`;
   const A = S.ins.filter(i => i.statut === 'Confirmée'), cap = +r.capacite || 0, att = S.ins.filter(i => i.statut === "Liste d'attente").length;
   const due = A.length * (+r.prix || 0), paid = S.ins.filter(i => i.statut !== 'Annulée').reduce((s, i) => s + (+i.montant || 0), 0), loges = A.filter(i => i.chambreId).length;
   return head + `<div class="stats">
@@ -432,7 +447,7 @@ function vInscr(r) {
 }
 
 function vProg(r) {
-  const ed = S.admin;
+  const ed = ADM();
   tools('prog' + r.id + ed, `<div class="tools"><h2>Programme de la retraite</h2>${ed ? '<button class="pri" data-new="programme">Ajouter une activité</button>' : ''}</div>`);
   const P = [...S.prog].sort((a, b) => ((a.date || '') + (a.heure || '')).localeCompare((b.date || '') + (b.heure || '')));
   if (!P.length) { $('#list').innerHTML = ed ? '<div class="empty"><h3>Le programme est vide</h3><p>Offices, enseignements, temps de silence et repas, jour après jour.</p><button class="pri" data-new="programme">Ajouter une activité</button></div>' : '<div class="empty"><h3>Programme à venir</h3><p>Le programme détaillé sera publié ici prochainement.</p></div>'; return }
@@ -444,7 +459,7 @@ function vProg(r) {
 const daysBetween = (a, b) => Math.round((new Date(b + 'T12:00') - new Date(a + 'T12:00')) / 864e5);
 function vHome(r) {
   tools('home' + r.id, '');
-  const me = S.me, t = today(), ch = S.rooms.find(c => c.id === me.chambreId), lim = r.dateLimiteChambres, isOpen = open_();
+  const me = ME(), t = today(), ch = S.rooms.find(c => c.id === me.chambreId), lim = r.dateLimiteChambres, isOpen = open_();
   const nuits = Math.max(0, daysBetween(r.debut, r.fin));
   const when = t < r.debut ? (d => d === 1 ? 'Demain !' : `Dans ${d} jours`)(daysBetween(t, r.debut)) : t <= r.fin ? `En cours · jour ${daysBetween(r.debut, t) + 1}` : 'Retraite terminée';
   const now = new Date(), nowKey = t + ' ' + now.toTimeString().slice(0, 5);
@@ -469,7 +484,7 @@ function vHome(r) {
 
 const beds = (o, n) => `<div class="beds" aria-hidden="true">${Array.from({length: Math.max(n, o)}, (_, k) => `<i class="${k < o ? (k >= n ? 'x' : 'f') : ''}"></i>`).join('')}</div>`;
 function vRoomsPart(r) {
-  const me = S.me, isOpen = open_();
+  const me = ME(), isOpen = open_();
   tools('chp' + r.id, '<div class="tools"><h2>Les chambres</h2></div>');
   const L = S.rooms.filter(c => c.type === me.sexe).sort(byName);
   const banner = isOpen
@@ -522,7 +537,7 @@ function vRoomsAdmin(r) {
 }
 
 function vInfos(r) {
-  const ed = S.admin, L = rubOf(r), shown = ed ? L : L.filter(x => x.texte || x.lien);
+  const ed = ADM(), L = rubOf(r), shown = ed ? L : L.filter(x => x.texte || x.lien);
   tools('inf' + r.id + ed, `<div class="tools"><h2>Infos pratiques</h2>${ed ? '<button class="pri" data-new="rubrique">Ajouter une rubrique</button>' : ''}</div>`);
   if (!shown.length) { $('#list').innerHTML = ed ? '<div class="empty"><h3>Aucune rubrique</h3><p>Ajoutez les informations utiles : lieu, horaires, affaires à apporter, contacts…</p><button class="pri" data-new="rubrique">Ajouter une rubrique</button></div>' : '<div class="empty"><h3>Infos à venir</h3><p>Les informations pratiques seront publiées ici prochainement.</p></div>'; return }
   const map = a => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(String(a).replace(/\n/g, ' '))}`;
@@ -555,9 +570,11 @@ document.addEventListener('click', async e => {
   const b = e.target.closest('button'); if (!b || b.closest('#dlg') || b.closest('#gate')) return;
   if (b.id === 'logout') { stopAll(); return signOut(auth) }
   if (b.classList.contains('tel')) return openDlg(`<h2>Appeler ce numéro ?</h2><p class="bignum">${esc(b.dataset.show)}</p><p class="dim">Votre téléphone va lancer l’appel.</p><div class="acts"><button type="button" id="tcopy" data-n="${esc(b.dataset.show)}">Copier</button><span class="sp"></span><button type="button" data-close>Annuler</button><a class="btn pri" id="tgo" href="tel:${esc(b.dataset.tel)}">${TELICO}Appeler</a></div>`, {col:'tel'});
+  if (b.dataset.pick && S.preview) return toast('Aperçu : le choix de chambre n’est pas enregistré.');
   if (b.dataset.pick) { const c = S.rooms.find(x => x.id === b.dataset.pick); if (!c) return;
     return openDlg(`<h2>${S.me.chambreId ? 'Changer de chambre ?' : 'Choisir cette chambre ?'}</h2><p class="bignum" style="white-space:normal">${esc(c.nom)}</p><p class="dim">${(c.occupes || 0)}/${c.lits} places occupées.${S.me.chambreId ? ' Votre place actuelle sera libérée.' : ''} Vous pourrez encore changer tant qu’il reste de la place, jusqu’à la date limite.</p><div class="acts"><span class="sp"></span><button type="button" data-close>Annuler</button><button type="button" class="pri" id="pickgo" data-cid="${esc(c.id)}">Confirmer</button></div>`, {col:'pick'}) }
-  if (!S.admin) return;
+  if (b.id === 'pvbtn') { S.preview = !S.preview; S.toolsKey = ''; history.replaceState(null, '', location.pathname + location.search); render(); scrollTo({top: 0}); return }
+  if (!ADM()) return;
   if (b.dataset.new === 'rubrique') return form('rubrique', null, {});
   if (b.dataset.new === 'equipe') return S.resp ? form('equipe', null, {role: 'organisateur'}) : toast('Seul le responsable peut ajouter des organisateurs.');
   if (b.dataset.new) { const pre = b.dataset.new === 'inscrits' ? {statut:'Confirmée'} : b.dataset.new === 'programme' ? {date: b.dataset.day || S.ret.debut, type:'Office / prière'} : b.dataset.new === 'chambres' ? {lits: 1, type:'H', pmr:'Non'} : {}; return form(b.dataset.new, null, pre) }
@@ -575,6 +592,7 @@ document.addEventListener('click', async e => {
 document.addEventListener('change', async e => {
   const t = e.target;
   if (t.id === 'pick') return setRetreat(t.value);
+  if (t.id === 'pvsel') { S.pv = t.value; S.toolsKey = ''; return render() }
   if (t.id === 'fs') { S.fStat = t.value; return render() }
   if (t.id === 'copyfrom' && t.value) { t.disabled = true; try { await copyRooms(t.value) } catch (x) { toast(dbErr(x)) } t.value = ''; t.disabled = false; return }
   if (t.id === 'deadline') { try { await updateDoc(doc(db, 'retraites', S.rid), {dateLimiteChambres: t.value, limiteChambresTs: t.value ? endOfDay(t.value) : null}); toast(t.value ? 'Date limite enregistrée.' : 'Date limite retirée.') } catch (x) { toast(dbErr(x)) } return }

@@ -165,3 +165,11 @@ mark{background:var(--gold);color:#2a1a1b;padding:0 4px;border-radius:3px}
 .hcard dt{color:var(--mut)}.hcard dd{margin:0}
 .hlink{margin-top:auto;padding-top:10px;color:var(--vi);font-weight:600;text-decoration:none}
 .hlink:hover{text-decoration:underline}
+
+/* mode aperçu des organisateurs */
+.pvbtn{min-height:40px;background:var(--gold);border-color:var(--gold);color:#4a0f13;font-size:14px}
+.pvbtn.on{background:#fff;border-color:#fff}
+.pvbar{position:sticky;top:0;z-index:7;background:var(--gold);color:#3a0d10;box-shadow:0 4px 14px #0003;padding-top:env(safe-area-inset-top)}
+.pvin{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;padding-block:8px;font-size:15px}
+.pvin select{width:auto;max-width:100%;min-height:38px;padding:4px 10px;background:#fff8ec;color:#2a1a1b;border-color:#8a6a2a}
+.pvin .dim2{font-size:13px;opacity:.8}
