@@ -276,7 +276,7 @@ const F = {
   fiche: {t:'fiche', f:[['urgenceNom','Personne à contacter en cas d’urgence (nom, lien)'],['urgenceTel','Téléphone d’urgence','tel'],['allergies','Allergies (détail)','textarea'],['sante','Santé : traitements, handicap, informations utiles','textarea'],['remarques','Remarques du retraitant','textarea'],['notesOrg','Notes des organisateurs','textarea']]},
   chambres: {t:'chambre', f:[['nom','Nom de la chambre','text',1],['type','Réservée aux',[['H','Hommes'],['F','Femmes']]],['lits','Nombre de places','number',1],['batiment','Bâtiment / étage'],['pmr','Accessible PMR',['Non','Oui']]]},
   programme: {t:'activité', f:[['date','Jour','date',1],['heure','Début','time',1],['fin','Fin','time'],['titre','Activité','text',1],['type','Type',Object.keys(TYPES)],['lieu','Lieu'],['intervenant','Intervenant']]},
-  texte: {t:'texte', f:[['titre','Titre','text',1],['date','Jour (facultatif)','date'],['auteur','Auteur / intervenant'],['contenu','Texte','textarea',1]]},
+  texte: {t:'texte', f:[['titre','Titre','text',1],['date','Jour (facultatif)','date'],['auteur','Auteur / intervenant'],['contenu','Texte','textarea']]},
   rubrique: {t:'rubrique', f:[['titre','Titre de la rubrique','text',1],['texte','Contenu','textarea'],['lien','Adresse pour le lien itinéraire (facultatif)']]},
   equipe: {t:'organisateur', f:[['email','Adresse e-mail','email',1],['nom','Nom'],['role','Rôle',[['organisateur','Organisateur'],['responsable','Responsable']]]]}
 };
@@ -298,6 +298,7 @@ function form(col, obj, preset) {
   let out = '', buf = [];
   F[col].f.map(input).forEach(([p, h]) => { if (p) buf.push(h); else { if (buf.length) { out += `<div class="grid2">${buf.join('')}</div>`; buf = [] } out += h } });
   if (buf.length) out += `<div class="grid2">${buf.join('')}</div>`;
+  if (col === 'texte') out += piecesField(o);
   openDlg(`<h2>${obj ? 'Modifier' : 'Ajouter'} : ${F[col].t}</h2>${out}<p class="bad" id="err" role="alert"></p>
    <div class="acts">${obj ? '<button type="button" class="danger" id="del">Supprimer</button>' : ''}<span class="sp"></span><button type="button" data-close>Annuler</button><button class="pri">Enregistrer</button></div>`,
    {col, id: obj && obj.id, obj, confirm: false});
@@ -315,7 +316,7 @@ $('#dlg').addEventListener('submit', async e => {
     else if (col === 'chambres') await saveRoom(o, obj);
     else if (col === 'programme') { const ref = id ? doc(db, 'retraites', S.rid, 'programme', id) : doc(collection(db, 'retraites', S.rid, 'programme')); await setDoc(ref, o) }
     else if (col === 'rubrique') await saveRub(o, id);
-    else if (col === 'texte') await setDoc(id ? doc(db, 'retraites', S.rid, 'textes', id) : doc(collection(db, 'retraites', S.rid, 'textes')), {...o, publieLe: (obj && obj.publieLe) || new Date().toISOString()});
+    else if (col === 'texte') await saveTexte(o, id, obj, btn);
     else if (col === 'equipe') { const em = low(o.email); if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) throw {userMsg: 'Adresse e-mail invalide.'}; if (!S.resp) throw {userMsg: 'Seul le responsable peut gérer les organisateurs.'}; if (em === low(S.user.email)) throw {userMsg: 'Vous ne pouvez pas modifier votre propre accès.'}; await setDoc(doc(db, 'organisateurs', em), {nom: o.nom, role: o.role || 'organisateur', ajouteLe: (ed.obj && ed.obj.ajouteLe) || today()}) }
     closeDlg(); toast('Enregistré.');
   } catch (x) { btn.disabled = false; err(x.userMsg || dbErr(x)) }
@@ -337,7 +338,7 @@ $('#dlg').addEventListener('click', async e => {
     else if (ed.col === 'inscrits') await deleteIns(ed.obj);
     else if (ed.col === 'chambres') { if ((ed.obj.occupes || 0) > 0 || S.ins.some(i => i.chambreId === ed.id)) throw {userMsg: 'Cette chambre a des occupants : retirez-les d’abord.'}; await deleteDoc(doc(db, 'retraites', S.rid, 'chambres', ed.id)) }
     else if (ed.col === 'programme') await deleteDoc(doc(db, 'retraites', S.rid, 'programme', ed.id));
-    else if (ed.col === 'texte') await deleteDoc(doc(db, 'retraites', S.rid, 'textes', ed.id));
+    else if (ed.col === 'texte') { for (const p of (ed.obj.pieces || [])) await delPiece(ed.id, p); await deleteDoc(doc(db, 'retraites', S.rid, 'textes', ed.id)) }
     else if (ed.col === 'rubrique') await updateDoc(doc(db, 'retraites', S.rid), {rubriques: rubOf(S.ret).filter(x => x.id !== ed.id)});
     else if (ed.col === 'equipe') { if (!S.resp) throw {userMsg: 'Seul le responsable peut retirer un organisateur.'}; if (ed.id === low(S.user.email)) throw {userMsg: 'Vous ne pouvez pas vous retirer vous-même.'}; await deleteDoc(doc(db, 'organisateurs', ed.id)) }
     closeDlg(); toast('Supprimé.');
@@ -624,7 +625,84 @@ function vTextes(r) {
   tools('tx' + r.id + ed, `<div class="tools"><h2>Textes et méditations</h2>${ed ? '<button class="pri" data-new="texte">Ajouter un texte</button>' : ''}</div>`);
   const L = [...S.textes].sort((a, b) => ((a.date || '9') + (a.publieLe || '')).localeCompare((b.date || '9') + (b.publieLe || '')));
   if (!L.length) { $('#list').innerHTML = ed ? '<div class="empty"><h3>Aucun texte</h3><p>Publiez les textes des enseignements, une prière, les lectures du jour… Les retraitants les retrouvent dans l’onglet « Textes ».</p><button class="pri" data-new="texte">Ajouter un texte</button></div>' : '<div class="empty"><h3>Aucun texte pour l’instant</h3><p>Les textes des enseignements et des méditations seront publiés ici.</p></div>'; return }
-  $('#list').innerHTML = (ed ? '<p class="note">Ces textes sont visibles par les retraitants confirmés dans l’onglet « Textes ».</p>' : '') + `<div class="texts">${L.map((x, k) => `<details class="txt"${!ed && k === 0 && L.length === 1 ? ' open' : ''}><summary><span><b>${esc(x.titre)}</b><small>${[x.date && fmt(x.date, {weekday:'long', day:'numeric', month:'long'}), x.auteur].filter(Boolean).map(esc).join(' · ')}</small></span>${ed ? `<button class="sm" data-edit="texte:${esc(x.id)}">Modifier</button>` : ''}</summary><div class="txtbody">${esc(x.contenu)}</div></details>`).join('')}</div>`;
+  $('#list').innerHTML = (ed ? '<p class="note">Ces textes sont visibles par les retraitants confirmés dans l’onglet « Textes ».</p>' : '') + `<div class="texts">${L.map((x, k) => `<details class="txt" data-tx="${esc(x.id)}"${(S.openTx || new Set()).has(x.id) || (!ed && k === 0 && L.length === 1) ? ' open' : ''}><summary><span><b>${esc(x.titre)}</b><small>${[x.date && fmt(x.date, {weekday:'long', day:'numeric', month:'long'}), x.auteur, (x.pieces || []).length && `${x.pieces.length} pièce${x.pieces.length > 1 ? 's' : ''} jointe${x.pieces.length > 1 ? 's' : ''}`].filter(Boolean).map(esc).join(' · ')}</small></span>${ed ? `<button class="sm" data-edit="texte:${esc(x.id)}">Modifier</button>` : ''}</summary><div class="txtbody">${x.contenu ? `<div class="txttext">${esc(x.contenu)}</div>` : ''}${piecesHTML(x)}</div></details>`).join('')}</div>`;
+  document.querySelectorAll('details.txt[open]').forEach(d => fillImages(d));
+}
+
+/* ---------- photos et PDF des textes (stockés dans la base, en morceaux) ---------- */
+const CHUNK = 700000, MAXPDF = 5 * 1024 * 1024;
+const fsize = n => n > 1048576 ? (n / 1048576).toFixed(1).replace('.', ',') + ' Mo' : Math.max(1, Math.round(n / 1024)) + ' Ko';
+function piecesField(o) {
+  const P = o.pieces || [];
+  return `<fieldset class="pieces"><legend>Photos et documents PDF</legend>
+   ${P.length ? `<ul>${P.map(p => `<li><span>${p.type === 'pdf' ? '📄' : '🖼️'} ${esc(p.nom)} <small class="dim">${fsize(p.taille || 0)}</small></span><label class="chk"><input type="checkbox" data-rmpiece="${esc(p.id)}"> Retirer</label></li>`).join('')}</ul>` : ''}
+   <label><span>Ajouter des photos ou des PDF</span><input type="file" id="pfiles" accept="image/*,application/pdf" multiple></label>
+   <small class="dim">Les photos sont réduites automatiquement. PDF : 5 Mo maximum chacun (au-delà, mettez un lien Google Drive dans le texte).</small></fieldset>`;
+}
+const readAsDataURL = f => new Promise((ok, ko) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = ko; r.readAsDataURL(f) });
+async function shrinkImage(f) {
+  const url = await readAsDataURL(f), img = new Image();
+  await new Promise((ok, ko) => { img.onload = ok; img.onerror = ko; img.src = url });
+  const max = 1600, k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+  const c = document.createElement('canvas'); c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+  const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height);
+  return c.toDataURL('image/jpeg', 0.82);
+}
+async function delPiece(tid, p) {
+  const b = writeBatch(db);
+  for (let k = 0; k < (p.parts || 1); k++) b.delete(doc(db, 'retraites', S.rid, 'textes', tid, 'pieces', `${p.id}_${k}`));
+  await b.commit();
+}
+async function saveTexte(o, id, obj, btn) {
+  const ref = id ? doc(db, 'retraites', S.rid, 'textes', id) : doc(collection(db, 'retraites', S.rid, 'textes'));
+  const rm = new Set([...document.querySelectorAll('[data-rmpiece]:checked')].map(x => x.dataset.rmpiece));
+  const files = [...(($('#pfiles') || {}).files || [])];
+  for (const f of files) {
+    if (f.type === 'application/pdf' && f.size > MAXPDF) throw {userMsg: `« ${f.name} » dépasse 5 Mo. Réduisez-le ou mettez un lien Google Drive dans le texte.`};
+    if (f.type !== 'application/pdf' && !f.type.startsWith('image/')) throw {userMsg: `« ${f.name} » n’est ni une photo ni un PDF.`};
+  }
+  const keep = (obj && obj.pieces || []).filter(p => !rm.has(p.id));
+  if (!o.contenu && !keep.length && !files.length) throw {userMsg: 'Ajoutez un texte, une photo ou un PDF.'};
+  for (const p of (obj && obj.pieces || []).filter(p => rm.has(p.id))) await delPiece(ref.id, p);
+  let n = 0;
+  for (const f of files) {
+    btn.textContent = `Envoi ${++n}/${files.length}…`;
+    const isPdf = f.type === 'application/pdf', data = isPdf ? await readAsDataURL(f) : await shrinkImage(f);
+    const b64 = data.slice(data.indexOf(',') + 1), pid = 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), parts = Math.ceil(b64.length / CHUNK);
+    for (let k = 0; k < parts; k += 8) { const b = writeBatch(db); for (let q = k; q < Math.min(parts, k + 8); q++) b.set(doc(db, 'retraites', S.rid, 'textes', ref.id, 'pieces', `${pid}_${q}`), {d: b64.slice(q * CHUNK, (q + 1) * CHUNK)}); await b.commit() }
+    keep.push({id: pid, nom: f.name.replace(/\.[^.]+$/, '') + (isPdf ? '.pdf' : '.jpg'), type: isPdf ? 'pdf' : 'image', mime: isPdf ? 'application/pdf' : 'image/jpeg', taille: Math.round(b64.length * 0.75), parts});
+  }
+  await setDoc(ref, {...o, pieces: keep, publieLe: (obj && obj.publieLe) || new Date().toISOString()});
+}
+const PCACHE = new Map();
+async function loadPiece(tid, p) {
+  if (PCACHE.has(p.id)) return PCACHE.get(p.id);
+  const prom = (async () => { let s = ''; for (let k = 0; k < (p.parts || 1); k++) { const d = await getDoc(doc(db, 'retraites', S.rid, 'textes', tid, 'pieces', `${p.id}_${k}`)); s += d.exists() ? d.data().d : '' } return `data:${p.mime || (p.type === 'pdf' ? 'application/pdf' : 'image/jpeg')};base64,${s}` })();
+  PCACHE.set(p.id, prom); prom.catch(() => PCACHE.delete(p.id)); return prom;
+}
+function piecesHTML(x) {
+  const P = x.pieces || []; if (!P.length) return '';
+  return `<div class="tpieces">${P.map(p => p.type === 'pdf'
+    ? `<button class="pdfbtn" data-pdf="${esc(x.id)}:${esc(p.id)}">📄 <span>${esc(p.nom)}</span><small>${fsize(p.taille || 0)} · ouvrir</small></button>`
+    : `<figure class="timg" data-img="${esc(x.id)}:${esc(p.id)}"><span class="dim">Chargement de la photo…</span></figure>`).join('')}</div>`;
+}
+async function fillImages(root) {
+  for (const f of root.querySelectorAll('figure[data-img]:not([data-done])')) {
+    f.dataset.done = 1; const [tid, pid] = f.dataset.img.split(':'), x = S.textes.find(t => t.id === tid), p = x && (x.pieces || []).find(q => q.id === pid); if (!p) continue;
+    try { const src = await loadPiece(tid, p); f.innerHTML = `<img src="${src}" alt="${esc(p.nom)}" loading="lazy"><a class="dim" href="${src}" download="${esc(p.nom)}">Télécharger</a>` } catch (e) { f.innerHTML = '<span class="bad">Photo indisponible.</span>' }
+  }
+}
+async function openPdf(key, btn) {
+  const [tid, pid] = key.split(':'), x = S.textes.find(t => t.id === tid), p = x && (x.pieces || []).find(q => q.id === pid); if (!p) return;
+  const lab = btn.querySelector('small'), old = lab.textContent; lab.textContent = 'chargement…'; btn.disabled = true;
+  try {
+    const src = await loadPiece(tid, p), bin = atob(src.slice(src.indexOf(',') + 1)), u8 = new Uint8Array(bin.length);
+    for (let k = 0; k < bin.length; k++) u8[k] = bin.charCodeAt(k);
+    const url = URL.createObjectURL(new Blob([u8], {type: 'application/pdf'})), a = document.createElement('a');
+    a.href = url; a.target = '_blank'; a.rel = 'noopener'; if (/iphone|ipad|ipod/i.test(navigator.userAgent) && matchMedia('(display-mode: standalone)').matches) a.download = p.nom;
+    document.body.appendChild(a); a.click(); setTimeout(() => a.remove(), 1000);
+  } catch (e) { toast('Impossible d’ouvrir ce PDF pour le moment.') }
+  lab.textContent = old; btn.disabled = false;
 }
 
 /* ---------- questionnaire de fin de retraite ---------- */
@@ -900,6 +978,7 @@ function vTeam() {
 document.addEventListener('click', async e => {
   const b = e.target.closest('button'); if (!b || b.closest('#dlg') || b.closest('#gate')) return;
   if (b.id === 'logout') { stopAll(); return signOut(auth) }
+  if (b.dataset.pdf) return openPdf(b.dataset.pdf, b);
   if (b.classList.contains('tel')) return openDlg(`<h2>Appeler ce numéro ?</h2><p class="bignum">${esc(b.dataset.show)}</p><p class="dim">Votre téléphone va lancer l’appel.</p><div class="acts"><button type="button" id="tcopy" data-n="${esc(b.dataset.show)}">Copier</button><span class="sp"></span><button type="button" data-close>Annuler</button><a class="btn pri" id="tgo" href="tel:${esc(b.dataset.tel)}">${TELICO}Appeler</a></div>`, {col:'tel'});
   if (b.dataset.pick && S.preview) return toast('Aperçu : le choix de chambre n’est pas enregistré.');
   if (b.dataset.pick) { const c = S.rooms.find(x => x.id === b.dataset.pick); if (!c) return;
@@ -947,5 +1026,6 @@ document.addEventListener('change', async e => {
 });
 document.addEventListener('input', e => { if (e.target.id === 'q') { S.q = e.target.value; render() } if (e.target.id === 'qa') { S.qa = e.target.value; render() } if (e.target.id === 'imptxt') { IMP = null; const g = $('#impgo'); if (g) { g.disabled = true; g.textContent = 'Importer' } } });
 setInterval(() => { if (!$('#app').hidden && !S.editing && ['programme', 'accueil'].includes(view()) && !document.activeElement.matches('input,textarea,select')) render() }, 60000);
+document.addEventListener('toggle', e => { const d = e.target; if (!d.matches || !d.matches('details.txt')) return; S.openTx = S.openTx || new Set(); d.open ? S.openTx.add(d.dataset.tx) : S.openTx.delete(d.dataset.tx); if (d.open) fillImages(d) }, true);
 document.addEventListener('submit', e => { if (e.target.id === 'avisform') { e.preventDefault(); sendAvis(e.target) } });
 addEventListener('hashchange', () => { S.toolsKey = ''; render(); scrollTo({top: 0}) });

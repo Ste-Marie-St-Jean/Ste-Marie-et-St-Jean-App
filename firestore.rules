@@ -114,6 +114,11 @@ service cloud.firestore {
       match /textes/{tid} {
         allow read: if isAdmin() || isParticipant(rid);
         allow write: if isAdmin();
+        // Photos et PDF joints, découpés en morceaux.
+        match /pieces/{pid} {
+          allow read: if isAdmin() || isParticipant(rid);
+          allow write: if isAdmin();
+        }
       }
 
       // Avis de fin de retraite : chaque retraitant écrit et relit le sien ; les organisateurs lisent tout.

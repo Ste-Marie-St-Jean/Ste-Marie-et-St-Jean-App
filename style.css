@@ -315,3 +315,15 @@ body{min-height:100vh;min-height:100dvh}
 .note.okm{border-left-color:var(--ok)}
 a.btn{border:1px solid var(--line);color:var(--vi);background:var(--bg)}
 .avis .stars label>span{display:inline;font-size:36px;font-weight:400;margin:0;line-height:1}
+
+/* pièces jointes des textes */
+.pieces{border:1px dashed var(--line);border-radius:10px;padding:10px 14px;margin:0 0 12px}
+.pieces legend{font-weight:600;font-size:14px;padding:0 4px}
+.pieces ul{list-style:none;padding:0;margin:0 0 10px}.pieces li{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)}
+.pieces input[type=file]{padding:8px;background:var(--soft)}
+.txttext{white-space:pre-line}
+.txtbody{white-space:normal}
+.tpieces{display:grid;gap:12px;margin-top:14px;font:16px "Source Sans 3",sans-serif}
+.timg{margin:0;display:grid;gap:4px}.timg img{max-width:100%;height:auto;border-radius:8px;border:1px solid var(--line)}
+.pdfbtn{display:flex;align-items:center;gap:10px;justify-content:flex-start;min-height:56px;padding:8px 14px;text-align:left;color:var(--ink);background:var(--bg);font-size:20px}
+.pdfbtn span{font-size:16px;font-weight:600}.pdfbtn small{margin-left:auto;font-size:13px;color:var(--mut);font-weight:400}
