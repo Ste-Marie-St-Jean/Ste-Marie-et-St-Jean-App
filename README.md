@@ -5,7 +5,7 @@ Application des retraites spirituelles de la paroisse.
 - **Retraitants** : connexion avec l'adresse e-mail donnée à l'inscription, fiche (sexe, date de naissance), programme, choix de la chambre, infos pratiques.
 - **Organisateurs** : inscriptions, paiements, chambres, programme, infos pratiques, retraites, équipe.
 
-Adresse : https://ste-marie-st-jean.github.io/ste-marie-et-st-jean-app/
+Adresse : https://ste-marie-st-jean.github.io/Ste-Marie-et-St-Jean-App/
 
 Application web installable (« Ajouter à l'écran d'accueil »), hébergée sur GitHub Pages. Les données et les connexions sont gérées par Firebase (projet `ste-marie-et-st-jean-app`) : **aucune donnée personnelle n'est stockée dans ce dépôt**.
 
