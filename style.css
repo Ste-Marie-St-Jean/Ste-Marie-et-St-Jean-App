@@ -147,3 +147,21 @@ mark{background:var(--gold);color:#2a1a1b;padding:0 4px;border-radius:3px}
 .spin{display:grid;place-items:center;min-height:40vh;color:var(--mut)}
 @media(max-width:600px){.who-am-i span{display:none}}
 .band{padding-top:calc(22px + env(safe-area-inset-top))}
+
+/* accueil du retraitant */
+.hello{text-align:center;padding:4px 0 6px}
+.hello-k{font:600 clamp(15px,2.4vw,18px) Cinzel,serif;letter-spacing:.3em;color:var(--gold);margin:0;text-transform:uppercase}
+.hello-n{font:600 clamp(30px,6vw,48px)/1.1 Cinzel,serif;color:#fff;margin:6px 0 12px;font-variant:small-caps;text-wrap:balance}
+.hello-r{display:inline-flex;align-items:center;gap:10px;font:italic 500 clamp(18px,3vw,22px)/1.3 "Cormorant Garamond",serif;color:#ecdccb;max-width:100%}
+.hello-r svg{width:16px;height:16px;flex:none}
+.hcount{text-align:center;margin:-4px 0 18px}
+.home{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+.hcard{background:var(--soft);border:1px solid var(--line);border-top:3px solid var(--gold);border-radius:12px;padding:18px 20px;display:flex;flex-direction:column;gap:6px}
+.hcard h3{font-size:16px;letter-spacing:.06em;color:var(--mut);font-weight:600}
+.hcard .big{font:600 22px/1.2 Cinzel,serif;color:var(--vi);margin:2px 0 0}
+.hcard .it{font:italic 500 19px "Cormorant Garamond",serif;margin:0;color:var(--mut)}
+.hcard p{margin:0}.hcard .pre{white-space:pre-line}
+.hcard dl{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:6px 0 0;font-size:15px}
+.hcard dt{color:var(--mut)}.hcard dd{margin:0}
+.hlink{margin-top:auto;padding-top:10px;color:var(--vi);font-weight:600;text-decoration:none}
+.hlink:hover{text-decoration:underline}

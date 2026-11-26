@@ -24,6 +24,7 @@ const SEXE = {H:'Homme', F:'Femme'}, TYPE = {H:'Hommes', F:'Femmes'};
 const STATUTS = ['Confirmée', 'En attente', "Liste d'attente", 'Annulée'];
 const TYPES = {'Office / prière':'#6b4fa0','Messe':'#c48a2c','Enseignement':'#2f6b8f','Temps de silence':'#8a8396','Partage':'#2f7a5a','Accompagnement':'#a0566b','Repas':'#b0703a','Temps libre':'#5f8f3f'};
 const ICO = {
+  accueil:'<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 9.8V20h13V9.8"/><path d="M10 20v-5.5h4V20"/>',
   programme:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4M7.5 14h3M13.5 14h3M7.5 17.5h3"/>',
   chambres:'<path d="M3 19V6M3 15h18v4M21 15v-2.5A3.5 3.5 0 0 0 17.5 9H11v6"/><circle cx="7" cy="11.5" r="2"/>',
   infos:'<circle cx="12" cy="12" r="9"/><path d="M12 11v6"/><circle cx="12" cy="7.6" r=".6" fill="currentColor"/>',
@@ -31,7 +32,7 @@ const ICO = {
   retraites:'<path d="M9 6h12M9 12h12M9 18h12"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/>',
   equipe:'<path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6z"/><path d="M9 12l2 2 4-4"/>'};
 const V_ADMIN = {inscriptions:'Inscriptions', programme:'Programme', chambres:'Chambres', infos:'Infos pratiques', retraites:'Retraites', equipe:'Organisateurs'};
-const V_PART = {programme:'Programme', chambres:'Chambres', infos:'Infos pratiques'};
+const V_PART = {accueil:'Accueil', programme:'Programme', chambres:'Chambres', infos:'Infos pratiques'};
 const SEAL = '<img class="seal" src="logo.png" alt=""><div class="eb"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#copte"/></svg>ÉGLISE COPTE ORTHODOXE<svg viewBox="0 0 24 24" aria-hidden="true"><use href="#copte"/></svg></div>';
 
 function toast(t) { const el = $('#toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove('on'), 3200) }
@@ -226,7 +227,7 @@ function render() {
     $('#list').innerHTML = S.admin ? '<div class="empty"><h3>Aucune retraite</h3><p>Commencez par créer la première retraite.</p><button class="pri" data-new="retraites">Créer une retraite</button></div>' : '';
     return;
   }
-  ({inscriptions: vInscr, programme: vProg, chambres: S.admin ? vRoomsAdmin : vRoomsPart, infos: vInfos, retraites: vRet, equipe: vTeam})[v](r);
+  ({accueil: vHome, inscriptions: vInscr, programme: vProg, chambres: S.admin ? vRoomsAdmin : vRoomsPart, infos: vInfos, retraites: vRet, equipe: vTeam})[v](r);
 }
 function tools(key, html) { if (S.toolsKey !== key) { S.toolsKey = key; $('#tools').innerHTML = html } }
 
@@ -234,15 +235,7 @@ function hero(r) {
   if (!r) return `<h1>${S.admin ? 'Espace organisateurs' : 'Bienvenue'}</h1>`;
   const nuits = Math.max(0, Math.round((new Date(r.fin) - new Date(r.debut)) / 864e5));
   const head = `${!S.admin && S.me ? `<p class="welcome">Bienvenue, <b>${esc(name(S.me))}</b></p>` : `<p class="kick">${S.admin ? 'ESPACE ORGANISATEURS' : 'RETRAITE SPIRITUELLE'}</p>`}<h1>${esc(r.titre)}</h1><p class="meta">${r.theme ? `<span>${esc(r.theme)}</span>` : ''}<span>${fmt(r.debut, {day:'numeric', month:'long'})} → ${fmt(r.fin)}${nuits ? ` · ${nuits} nuit${nuits > 1 ? 's' : ''}` : ''}</span>${r.lieu ? `<span>${esc(r.lieu)}</span>` : ''}${r.animateur ? `<span>Prêchée par ${esc(r.animateur)}</span>` : ''}</p>`;
-  if (!S.admin) {
-    const ch = S.rooms.find(c => c.id === (S.me && S.me.chambreId));
-    const lim = r.dateLimiteChambres;
-    return head + `<div class="stats">
-     <div class="stat"><b>${ch ? esc(ch.nom) : '—'}</b><small>${ch ? 'votre chambre' : (open_() ? 'choisissez votre chambre' : 'chambre attribuée par les organisateurs')}</small></div>
-     <div class="stat"><b>${fmt(r.debut, {weekday:'short', day:'numeric'})}</b><small>arrivée${r.accueil ? ' · ' + esc(r.accueil) : ''}</small></div>
-     <div class="stat"><b>${lim ? fmt(lim, {day:'numeric', month:'short'}) : '—'}</b><small>date limite du choix des chambres</small></div>
-     <div class="stat"><b>${nuits || '—'}</b><small>nuit${nuits > 1 ? 's' : ''} sur place</small></div></div>`;
-  }
+  if (!S.admin) return `<div class="hello"><p class="hello-k">Bienvenue</p><p class="hello-n">${esc(S.me ? name(S.me) : '')}</p><div class="hello-r"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#copte"/></svg><span>${esc(r.titre)}</span><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#copte"/></svg></div></div>`;
   const A = S.ins.filter(i => i.statut === 'Confirmée'), cap = +r.capacite || 0, att = S.ins.filter(i => i.statut === "Liste d'attente").length;
   const due = A.length * (+r.prix || 0), paid = S.ins.filter(i => i.statut !== 'Annulée').reduce((s, i) => s + (+i.montant || 0), 0), loges = A.filter(i => i.chambreId).length;
   return head + `<div class="stats">
@@ -446,6 +439,32 @@ function vProg(r) {
   const days = [...new Set(P.map(p => p.date))];
   $('#list').innerHTML = days.map(d => { const n = Math.round((new Date(d) - new Date(r.debut)) / 864e5) + 1;
     return `<section class="day"><h3>${fmt(d, {weekday:'long', day:'numeric', month:'long'})}${n > 0 ? `<small>Jour ${n}</small>` : ''}</h3>${P.filter(p => p.date === d).map(p => `<div class="slot${ed ? '' : ' ro'}"><time>${esc(p.heure)}${p.fin ? `<small>→ ${esc(p.fin)}</small>` : ''}</time><div><b>${esc(p.titre)}</b><br><span class="dim"><span class="dot" style="background:${TYPES[p.type] || '#888'}"></span>${esc(p.type || '')}${p.lieu ? ' · ' + esc(p.lieu) : ''}${p.intervenant ? ' · ' + esc(p.intervenant) : ''}</span></div>${ed ? `<div><button class="sm" data-edit="programme:${esc(p.id)}">Modifier</button></div>` : ''}</div>`).join('')}${ed ? `<p><button class="sm" data-new="programme" data-day="${esc(d)}">+ Activité ce jour</button></p>` : ''}</section>` }).join('');
+}
+
+const daysBetween = (a, b) => Math.round((new Date(b + 'T12:00') - new Date(a + 'T12:00')) / 864e5);
+function vHome(r) {
+  tools('home' + r.id, '');
+  const me = S.me, t = today(), ch = S.rooms.find(c => c.id === me.chambreId), lim = r.dateLimiteChambres, isOpen = open_();
+  const nuits = Math.max(0, daysBetween(r.debut, r.fin));
+  const when = t < r.debut ? (d => d === 1 ? 'Demain !' : `Dans ${d} jours`)(daysBetween(t, r.debut)) : t <= r.fin ? `En cours · jour ${daysBetween(r.debut, t) + 1}` : 'Retraite terminée';
+  const now = new Date(), nowKey = t + ' ' + now.toTimeString().slice(0, 5);
+  const P = [...S.prog].sort((a, b) => ((a.date || '') + (a.heure || '')).localeCompare((b.date || '') + (b.heure || '')));
+  const next = P.find(p => `${p.date} ${p.heure}` >= nowKey);
+  const px = +r.prix || 0, paid = +me.montant || 0;
+  const contact = rubOf(r).find(x => /contact/i.test(x.titre || '') && x.texte);
+  const card = (title, body, link) => `<section class="hcard"><h3>${title}</h3>${body}${link ? `<a class="hlink" href="#${link[0]}">${link[1]} →</a>` : ''}</section>`;
+  $('#list').innerHTML = `<div class="hcount"><span class="tag ok">${when}</span></div><div class="home">
+  ${card('La retraite', `<p class="big">${esc(r.titre)}</p>${r.theme ? `<p class="it">${esc(r.theme)}</p>` : ''}
+    <dl><dt>Dates</dt><dd>Du ${fmt(r.debut, {weekday:'long', day:'numeric', month:'long'})}<br>au ${fmt(r.fin, {weekday:'long', day:'numeric', month:'long', year:'numeric'})}${nuits ? ` · ${nuits} nuit${nuits > 1 ? 's' : ''}` : ''}</dd>
+    ${r.accueil ? `<dt>Horaires</dt><dd>${esc(r.accueil)}</dd>` : ''}${r.lieu ? `<dt>Lieu</dt><dd>${esc(r.lieu)}</dd>` : ''}${r.animateur ? `<dt>Prédicateur</dt><dd>${esc(r.animateur)}</dd>` : ''}</dl>
+    ${r.description ? `<p>${esc(r.description)}</p>` : ''}`, ['infos', 'Toutes les infos pratiques'])}
+  ${card('Ma chambre', ch ? `<p class="big">${esc(ch.nom)}</p><p class="dim">${[TYPE[ch.type] && 'Chambre ' + TYPE[ch.type].toLowerCase(), ch.batiment, ch.pmr === 'Oui' && 'accessible PMR'].filter(Boolean).map(esc).join(' · ')}</p><div class="frac"><b>${ch.occupes || 0}/${ch.lits}</b> <span class="dim">places occupées</span></div>${isOpen && lim ? `<p class="dim">Vous pouvez encore changer jusqu’au ${fmt(lim, {day:'numeric', month:'long'})}.</p>` : ''}`
+     : isOpen ? `<p class="big">À choisir</p><p>Choisissez votre chambre${lim ? ` avant le <b>${fmt(lim, {weekday:'long', day:'numeric', month:'long'})}</b>` : ''}.</p>` : '<p class="big">—</p><p>Le choix est terminé : les organisateurs vous attribueront une chambre.</p>',
+     ['chambres', ch ? 'Voir les chambres' : 'Choisir ma chambre'])}
+  ${card('Prochaine activité', next ? `<p class="big">${esc(next.titre)}</p><p>${fmt(next.date, {weekday:'long', day:'numeric', month:'long'})} à <b>${esc(next.heure)}</b>${next.fin ? ` → ${esc(next.fin)}` : ''}</p><p class="dim"><span class="dot" style="background:${TYPES[next.type] || '#888'}"></span>${esc(next.type || '')}${next.lieu ? ' · ' + esc(next.lieu) : ''}${next.intervenant ? ' · ' + esc(next.intervenant) : ''}</p>` : `<p>${P.length ? 'Le programme de la retraite est terminé.' : 'Le programme sera publié prochainement.'}</p>`, ['programme', 'Tout le programme'])}
+  ${card('Ma fiche', `<dl><dt>Nom</dt><dd>${esc(name(me))}</dd><dt>Adresse</dt><dd>${esc(me.email || me.id)}</dd>${me.tel ? `<dt>Téléphone</dt><dd>${esc(me.tel)}</dd>` : ''}<dt>Sexe</dt><dd>${SEXE[me.sexe] || '—'}</dd><dt>Naissance</dt><dd>${fmt(me.naissance, {day:'numeric', month:'long', year:'numeric'})}${age(me.naissance) !== null ? ` · ${age(me.naissance)} ans` : ''}</dd>${me.regime ? `<dt>Régime</dt><dd>${esc(me.regime)}</dd>` : ''}${px ? `<dt>Participation</dt><dd>${paid >= px ? `<span class="ok">Réglée (${eur(px)})</span>` : paid > 0 ? `${eur(paid)} réglés sur ${eur(px)} · <b>reste ${eur(px - paid)}</b>` : `${eur(px)} · <b>à régler</b>`}</dd>` : ''}</dl><p class="dim">Une erreur ? Signalez-la aux organisateurs.</p>`)}
+  ${contact ? card(esc(contact.titre), `<p class="pre">${withTel(contact.texte)}</p>`) : ''}
+  </div>`;
 }
 
 const beds = (o, n) => `<div class="beds" aria-hidden="true">${Array.from({length: Math.max(n, o)}, (_, k) => `<i class="${k < o ? (k >= n ? 'x' : 'f') : ''}"></i>`).join('')}</div>`;
