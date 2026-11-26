@@ -222,3 +222,8 @@ body{min-height:100vh;min-height:100dvh}
 .annhome b{font:600 14px Cinzel,serif;letter-spacing:.14em;color:var(--gold);text-transform:uppercase}
 .tabbar a{position:relative}
 .tabbar a.dotted::after{content:"";position:absolute;top:8px;right:12px;width:10px;height:10px;border-radius:50%;background:#e8473f;box-shadow:0 0 0 2px var(--band)}
+
+.annbtns{display:flex;gap:8px;flex:none;align-items:center}
+.btn.wa{min-height:36px;padding:0 12px;font-size:14px;background:#1f8f4e;color:#fff;border-radius:8px}
+.btn.wa svg{width:16px;height:16px;fill:currentColor}
+@media(max-width:600px){.annlist li{flex-direction:column}.annbtns{align-self:flex-end}}

@@ -551,6 +551,9 @@ function vInfos(r) {
 }
 
 /* ---------- annonces ---------- */
+const APP_URL = location.origin + location.pathname.replace(/index\.html$/, '');
+const WAICO = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5a9.5 9.5 0 0 0-8.2 14.3L2.5 21.5l4.8-1.3A9.5 9.5 0 1 0 12 2.5zm0 1.8a7.7 7.7 0 1 1-3.9 14.3l-.3-.2-2.8.8.8-2.7-.2-.3A7.7 7.7 0 0 1 12 4.3zm-3 3.6c-.2 0-.5 0-.7.3-.3.3-1 1-1 2.3s1 2.7 1.1 2.9c.2.2 2 3.1 4.9 4.2 2.4.9 2.9.8 3.4.7.5 0 1.7-.7 1.9-1.4.2-.7.2-1.3.2-1.4-.1-.1-.3-.2-.6-.3l-2-1c-.3-.1-.5-.1-.7.1l-.9 1.1c-.2.2-.3.2-.6.1-.3-.1-1.2-.5-2.3-1.4-.8-.8-1.4-1.7-1.6-2-.2-.3 0-.4.1-.6l.4-.5.3-.5c.1-.2 0-.4 0-.5l-.9-2.2c-.2-.5-.4-.5-.6-.5H9z"/></svg>';
+const waLink = (r, a) => 'https://wa.me/?text=' + encodeURIComponent(`📢 *Annonce — ${r.titre}*\n\n${a.texte}\n\nOuvrir l’application : ${APP_URL}`);
 const annOf = r => [...((r && r.annonces) || [])].sort((a, b) => (b.le || '').localeCompare(a.le || ''));
 const annDate = s => s ? new Date(s).toLocaleString('fr-FR', {weekday:'long', day:'numeric', month:'long', hour:'2-digit', minute:'2-digit'}) : '';
 function seenKey(r) { return 'annonce-vue-' + r.id }
@@ -558,7 +561,7 @@ function markSeen(r) { const a = annOf(r)[0]; if (a) try { localStorage.setItem(
 function hasUnread(r) { const a = annOf(r)[0]; if (!a) return false; let s = ''; try { s = localStorage.getItem(seenKey(r)) || '' } catch (e) {} return a.le > s }
 function annBlock(r, ed) {
   const A = annOf(r);
-  if (ed) return A.length ? `<section class="annadm"><h3 style="font-size:17px">Annonces publiées</h3><ul class="annlist">${A.map(a => `<li><div><span class="dim">${esc(annDate(a.le))}</span><p>${withTel(a.texte)}</p></div><button class="sm danger" data-anndel="${esc(a.id)}">Supprimer</button></li>`).join('')}</ul></section>` : '';
+  if (ed) return A.length ? `<section class="annadm"><h3 style="font-size:17px">Annonces publiées</h3><ul class="annlist">${A.map(a => `<li><div><span class="dim">${esc(annDate(a.le))}</span><p>${withTel(a.texte)}</p></div><div class="annbtns"><a class="btn wa" href="${esc(waLink(r, a))}" target="_blank" rel="noopener">${WAICO}WhatsApp</a><button class="sm danger" data-anndel="${esc(a.id)}">Supprimer</button></div></li>`).join('')}</ul></section>` : '';
   if (!A.length) return '';
   const [a, ...old] = A;
   return `<section class="annonce" role="status"><h3>Annonce</h3><p class="annmsg">${withTel(a.texte)}</p><p class="anndate">${esc(annDate(a.le))}</p>
@@ -567,7 +570,7 @@ function annBlock(r, ed) {
 async function publishAnn() {
   const t = $('#anntext'), txt = (t.value || '').trim(); if (!txt) return toast('Écrivez le message de l’annonce.');
   const b = $('#annpub'); b.disabled = true;
-  try { const L = [...((S.ret && S.ret.annonces) || []), {id: 'a' + Date.now().toString(36), texte: txt, le: new Date().toISOString()}]; await updateDoc(doc(db, 'retraites', S.rid), {annonces: L}); t.value = ''; toast('Annonce publiée.') }
+  try { const L = [...((S.ret && S.ret.annonces) || []), {id: 'a' + Date.now().toString(36), texte: txt, le: new Date().toISOString()}]; await updateDoc(doc(db, 'retraites', S.rid), {annonces: L}); t.value = ''; toast('Annonce publiée. Touchez « WhatsApp » pour la partager au groupe.') }
   catch (x) { toast(dbErr(x)) } b.disabled = false;
 }
 
