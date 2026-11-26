@@ -5,6 +5,7 @@ rules_version = '2';
 //
 // Principe :
 //  - Organisateurs : adresse présente dans la collection « organisateurs » → accès complet.
+//    Seul un organisateur au rôle « responsable » peut ajouter / modifier / retirer des organisateurs.
 //  - Retraitant : adresse confirmée + inscrit au statut « Confirmée » dans la retraite
 //    + avant la fin d'accès (7 jours après le dernier jour) → lecture de sa retraite,
 //    de son inscription, choix de sa chambre et premier remplissage de son profil.
@@ -21,6 +22,10 @@ service cloud.firestore {
     }
     function isAdmin() {
       return signed() && exists(/databases/$(database)/documents/organisateurs/$(myEmail()));
+    }
+    function isResp() {
+      return isAdmin()
+        && get(/databases/$(database)/documents/organisateurs/$(myEmail())).data.get('role', '') == 'responsable';
     }
     function retPath(rid) {
       return /databases/$(database)/documents/retraites/$(rid);
@@ -77,9 +82,12 @@ service cloud.firestore {
           || (b == cid && a != cid && n == o - 1));
     }
 
+    // Seul le responsable gère l'équipe, et jamais sa propre fiche (pour ne pas se retirer l'accès).
     match /organisateurs/{email} {
       allow get: if signed() && (email == myEmail() || isAdmin());
-      allow list, write: if isAdmin();
+      allow list: if isAdmin();
+      allow write: if isResp() && email != myEmail()
+        && (request.resource == null || request.resource.data.get('role', 'organisateur') in ['organisateur', 'responsable']);
     }
 
     match /acces/{email} {

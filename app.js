@@ -149,7 +149,7 @@ function howTo() {
 addEventListener('beforeinstallprompt', e => { e.preventDefault(); S.installEvt = e });
 
 /* ---------- démarrage selon l'utilisateur ---------- */
-onAuthStateChanged(auth, u => { stopAll(); Object.assign(S, {user: u, admin: false, rid: null, ret: null, me: null, rets: [], myRets: [], ins: [], rooms: [], prog: [], orgs: [], toolsKey: ''}); if (!u) return loginScreen(); start(u) });
+onAuthStateChanged(auth, u => { stopAll(); Object.assign(S, {user: u, admin: false, resp: false, rid: null, ret: null, me: null, rets: [], myRets: [], ins: [], rooms: [], prog: [], orgs: [], toolsKey: ''}); if (!u) return loginScreen(); start(u) });
 
 async function start(u) {
   if (!u.emailVerified) return verifyScreen(u);
@@ -157,7 +157,7 @@ async function start(u) {
   const email = low(u.email);
   try {
     const org = await getDoc(doc(db, 'organisateurs', email));
-    if (org.exists()) { S.admin = true; return startAdmin() }
+    if (org.exists()) { S.admin = true; S.resp = org.data().role === 'responsable'; return startAdmin() }
   } catch (e) { /* pas organisateur */ }
   S.admin = false;
   let rids = [];
@@ -219,7 +219,7 @@ function render() {
   const pick = $('#pick');
   pick.hidden = !(S.admin ? list.length : list.length > 1);
   pick.innerHTML = [...list].sort((a, b) => (a.debut || '').localeCompare(b.debut || '')).map(x => `<option value="${esc(x.id)}"${x.id === S.rid ? ' selected' : ''}>${esc(x.titre)} — ${fmt(x.debut, {day:'numeric', month:'short', year:'numeric'})}</option>`).join('');
-  $('#whoami').textContent = S.admin ? 'Organisateur' : (S.me ? name(S.me) : '');
+  $('#whoami').textContent = S.admin ? (S.resp ? 'Responsable' : 'Organisateur') : (S.me ? name(S.me) : '');
   $('#hero').innerHTML = hero(r);
   $('#tabs').innerHTML = Object.entries(V()).map(([k, l]) => `<a href="#${k}" aria-label="${l}" title="${l}"${k === v ? ' aria-current="page"' : ''}><svg viewBox="0 0 24 24" aria-hidden="true">${ICO[k]}</svg></a>`).join('');
   if (!r && !['retraites', 'equipe'].includes(v)) {
@@ -253,7 +253,7 @@ const F = {
   chambres: {t:'chambre', f:[['nom','Nom de la chambre','text',1],['type','Réservée aux',[['H','Hommes'],['F','Femmes']]],['lits','Nombre de places','number',1],['batiment','Bâtiment / étage'],['pmr','Accessible PMR',['Non','Oui']]]},
   programme: {t:'activité', f:[['date','Jour','date',1],['heure','Début','time',1],['fin','Fin','time'],['titre','Activité','text',1],['type','Type',Object.keys(TYPES)],['lieu','Lieu'],['intervenant','Intervenant']]},
   rubrique: {t:'rubrique', f:[['titre','Titre de la rubrique','text',1],['texte','Contenu','textarea'],['lien','Adresse pour le lien itinéraire (facultatif)']]},
-  equipe: {t:'organisateur', f:[['email','Adresse e-mail','email',1],['nom','Nom']]}
+  equipe: {t:'organisateur', f:[['email','Adresse e-mail','email',1],['nom','Nom'],['role','Rôle',[['organisateur','Organisateur'],['responsable','Responsable']]]]}
 };
 const PAIR = ['debut','fin','capacite','prix','prenom','nom','tel','ville','statut','montant','sexe','naissance','heure','lits','type','pmr','date','lieu'];
 function openDlg(html, editing) { S.editing = editing; $('#dlg').innerHTML = html; $('#ov').classList.add('open'); const f = $('#dlg').querySelector('input:not([readonly]),select,textarea,button.pri'); f && f.focus() }
@@ -289,7 +289,7 @@ $('#dlg').addEventListener('submit', async e => {
     else if (col === 'chambres') await saveRoom(o, obj);
     else if (col === 'programme') { const ref = id ? doc(db, 'retraites', S.rid, 'programme', id) : doc(collection(db, 'retraites', S.rid, 'programme')); await setDoc(ref, o) }
     else if (col === 'rubrique') await saveRub(o, id);
-    else if (col === 'equipe') { const em = low(o.email); if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) throw {userMsg: 'Adresse e-mail invalide.'}; await setDoc(doc(db, 'organisateurs', em), {nom: o.nom, ajouteLe: (ed.obj && ed.obj.ajouteLe) || today()}) }
+    else if (col === 'equipe') { const em = low(o.email); if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) throw {userMsg: 'Adresse e-mail invalide.'}; if (!S.resp) throw {userMsg: 'Seul le responsable peut gérer les organisateurs.'}; if (em === low(S.user.email)) throw {userMsg: 'Vous ne pouvez pas modifier votre propre accès.'}; await setDoc(doc(db, 'organisateurs', em), {nom: o.nom, role: o.role || 'organisateur', ajouteLe: (ed.obj && ed.obj.ajouteLe) || today()}) }
     closeDlg(); toast('Enregistré.');
   } catch (x) { btn.disabled = false; err(x.userMsg || dbErr(x)) }
 });
@@ -308,7 +308,7 @@ $('#dlg').addEventListener('click', async e => {
     else if (ed.col === 'chambres') { if ((ed.obj.occupes || 0) > 0 || S.ins.some(i => i.chambreId === ed.id)) throw {userMsg: 'Cette chambre a des occupants : retirez-les d’abord.'}; await deleteDoc(doc(db, 'retraites', S.rid, 'chambres', ed.id)) }
     else if (ed.col === 'programme') await deleteDoc(doc(db, 'retraites', S.rid, 'programme', ed.id));
     else if (ed.col === 'rubrique') await updateDoc(doc(db, 'retraites', S.rid), {rubriques: rubOf(S.ret).filter(x => x.id !== ed.id)});
-    else if (ed.col === 'equipe') { if (ed.id === low(S.user.email)) throw {userMsg: 'Vous ne pouvez pas vous retirer vous-même.'}; await deleteDoc(doc(db, 'organisateurs', ed.id)) }
+    else if (ed.col === 'equipe') { if (!S.resp) throw {userMsg: 'Seul le responsable peut retirer un organisateur.'}; if (ed.id === low(S.user.email)) throw {userMsg: 'Vous ne pouvez pas vous retirer vous-même.'}; await deleteDoc(doc(db, 'organisateurs', ed.id)) }
     closeDlg(); toast('Supprimé.');
   } catch (x) { b.disabled = false; $('#err').textContent = x.userMsg || dbErr(x) }
 });
@@ -541,10 +541,13 @@ function vRet() {
 }
 
 function vTeam() {
-  tools('team', '<div class="tools"><h2>Organisateurs</h2><button class="pri" data-new="equipe">Ajouter un organisateur</button></div>');
-  const me = low(S.user.email);
-  $('#list').innerHTML = `<p class="note">Les organisateurs ont accès à tout : inscriptions, coordonnées, paiements, chambres, programme. Chacun se connecte avec sa propre adresse (bouton « Première connexion »).</p>
-  <table class="stack"><thead><tr><th>Adresse e-mail</th><th>Nom</th><th></th></tr></thead><tbody>${[...S.orgs].sort((a, b) => a.id.localeCompare(b.id)).map(o => `<tr><td><b>${esc(o.id)}</b>${o.id === me ? ' <span class="dim">(vous)</span>' : ''}</td><td>${esc(o.nom || '')}</td><td>${o.id === me ? '' : `<button class="sm" data-edit="equipe:${esc(o.id)}">Modifier</button>`}</td></tr>`).join('')}</tbody></table>`;
+  const me = low(S.user.email), R = {responsable: 'Responsable', organisateur: 'Organisateur'};
+  tools('team' + S.resp, `<div class="tools"><h2>Organisateurs</h2>${S.resp ? '<button class="pri" data-new="equipe">Ajouter un organisateur</button>' : ''}</div>`);
+  const L = [...S.orgs].sort((a, b) => ((a.role === 'responsable' ? 0 : 1) - (b.role === 'responsable' ? 0 : 1)) || a.id.localeCompare(b.id));
+  $('#list').innerHTML = `<p class="note">${S.resp
+    ? 'En tant que <b>responsable</b>, vous seul pouvez ajouter, modifier ou retirer des organisateurs. Chaque organisateur se connecte avec sa propre adresse (bouton « Première connexion »).'
+    : 'Seul le <b>responsable</b> peut ajouter ou retirer des organisateurs. Adressez-vous à lui pour toute modification de l’équipe.'}</p>
+  <table class="stack"><thead><tr><th>Adresse e-mail</th><th>Nom</th><th>Rôle</th><th></th></tr></thead><tbody>${L.map(o => `<tr><td><b>${esc(o.id)}</b>${o.id === me ? ' <span class="dim">(vous)</span>' : ''}</td><td>${esc(o.nom || '')}</td><td><span class="tag ${o.role === 'responsable' ? 'warn' : 'mu'}">${R[o.role] || 'Organisateur'}</span></td><td>${S.resp && o.id !== me ? `<button class="sm" data-edit="equipe:${esc(o.id)}">Modifier</button>` : ''}</td></tr>`).join('')}</tbody></table>`;
 }
 
 /* ---------- événements ---------- */
@@ -556,6 +559,7 @@ document.addEventListener('click', async e => {
     return openDlg(`<h2>${S.me.chambreId ? 'Changer de chambre ?' : 'Choisir cette chambre ?'}</h2><p class="bignum" style="white-space:normal">${esc(c.nom)}</p><p class="dim">${(c.occupes || 0)}/${c.lits} places occupées.${S.me.chambreId ? ' Votre place actuelle sera libérée.' : ''} Vous pourrez encore changer tant qu’il reste de la place, jusqu’à la date limite.</p><div class="acts"><span class="sp"></span><button type="button" data-close>Annuler</button><button type="button" class="pri" id="pickgo" data-cid="${esc(c.id)}">Confirmer</button></div>`, {col:'pick'}) }
   if (!S.admin) return;
   if (b.dataset.new === 'rubrique') return form('rubrique', null, {});
+  if (b.dataset.new === 'equipe') return S.resp ? form('equipe', null, {role: 'organisateur'}) : toast('Seul le responsable peut ajouter des organisateurs.');
   if (b.dataset.new) { const pre = b.dataset.new === 'inscrits' ? {statut:'Confirmée'} : b.dataset.new === 'programme' ? {date: b.dataset.day || S.ret.debut, type:'Office / prière'} : b.dataset.new === 'chambres' ? {lits: 1, type:'H', pmr:'Non'} : {}; return form(b.dataset.new, null, pre) }
   if (b.dataset.edit) { const [c, id] = b.dataset.edit.split(':'); const src = c === 'retraites' ? S.rets : c === 'equipe' ? S.orgs.map(o => ({...o, email: o.id})) : S[{inscrits:'ins', chambres:'rooms', programme:'prog'}[c]]; const o = src.find(x => x.id === id); return o && form(c, o) }
   if (b.dataset.redit) { const x = rubOf(S.ret).find(y => y.id === b.dataset.redit); return x && form('rubrique', x) }

@@ -18,7 +18,7 @@ Application web installable (« Ajouter à l'écran d'accueil »), hébergée su
 
 ## Mise en service (une seule fois)
 1. **Publier les règles de sécurité** : console Firebase → Firestore Database → onglet « Règles » → remplacer tout le contenu par celui de `firestore.rules` → « Publier ».
-2. **Déclarer le premier organisateur** : Firestore Database → « Données » → « Commencer une collection » → ID : `organisateurs` → ID du document : votre adresse e-mail **en minuscules** → champ `nom` (chaîne) → « Enregistrer ».
+2. **Déclarer le responsable** : Firestore Database → « Données » → « Commencer une collection » → ID : `organisateurs` → ID du document : votre adresse e-mail **en minuscules** → champ `nom` (chaîne) et champ `role` (chaîne) = `responsable` → « Enregistrer ». Seul un responsable peut ensuite ajouter ou retirer des organisateurs depuis l'application.
 3. **Activer GitHub Pages** : ce dépôt → Settings → Pages → Source « Deploy from a branch » → Branch `main`, dossier `/ (root)` → Save.
 4. Ouvrir l'application, choisir « Première connexion » avec votre adresse, confirmer l'e-mail reçu. Les autres organisateurs s'ajoutent ensuite depuis l'onglet « Organisateurs » de l'application.
 
