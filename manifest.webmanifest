@@ -1,0 +1,16 @@
+{
+  "name": "Retraites · Sainte Marie et Saint Jean",
+  "short_name": "Retraites",
+  "description": "Retraites spirituelles de l'Église copte orthodoxe Sainte Marie et Saint Jean",
+  "lang": "fr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#6e1a1f",
+  "theme_color": "#6e1a1f",
+  "icons": [
+    {"src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png"},
+    {"src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}

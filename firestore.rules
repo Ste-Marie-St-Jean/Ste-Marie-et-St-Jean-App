@@ -1,0 +1,113 @@
+rules_version = '2';
+
+// Règles de sécurité — Application des retraites, Sainte Marie et Saint Jean.
+// À coller dans la console Firebase : Firestore Database → Règles → Publier.
+//
+// Principe :
+//  - Organisateurs : adresse présente dans la collection « organisateurs » → accès complet.
+//  - Retraitant : adresse confirmée + inscrit au statut « Confirmée » dans la retraite
+//    + avant la fin d'accès (7 jours après le dernier jour) → lecture de sa retraite,
+//    de son inscription, choix de sa chambre et premier remplissage de son profil.
+//  - Tout le reste est refusé.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signed() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+    function myEmail() {
+      return request.auth.token.email.lower();
+    }
+    function isAdmin() {
+      return signed() && exists(/databases/$(database)/documents/organisateurs/$(myEmail()));
+    }
+    function retPath(rid) {
+      return /databases/$(database)/documents/retraites/$(rid);
+    }
+    function insPath(rid) {
+      return /databases/$(database)/documents/retraites/$(rid)/inscrits/$(myEmail());
+    }
+    function roomPath(rid, cid) {
+      return /databases/$(database)/documents/retraites/$(rid)/chambres/$(cid);
+    }
+    function isParticipant(rid) {
+      return signed()
+        && exists(insPath(rid))
+        && get(insPath(rid)).data.statut == 'Confirmée'
+        && get(retPath(rid)).data.finAcces > request.time;
+    }
+    function beforeDeadline(rid) {
+      let r = get(retPath(rid)).data;
+      return r.get('limiteChambresTs', null) == null || request.time < r.limiteChambresTs;
+    }
+
+    // Premier remplissage du profil : sexe + date de naissance, une seule fois.
+    function profileOk() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['sexe', 'naissance', 'profilLe'])
+        && resource.data.get('sexe', '') == ''
+        && request.resource.data.sexe in ['H', 'F']
+        && request.resource.data.naissance is string
+        && request.resource.data.naissance.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
+    }
+
+    // Changement de chambre par le retraitant : cohérent avec les compteurs des chambres.
+    function roomChoiceOk(rid) {
+      let before = resource.data.get('chambreId', '');
+      let after = request.resource.data.get('chambreId', '');
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['chambreId'])
+        && after != before
+        && (after == '' || (
+              exists(roomPath(rid, after))
+              && get(roomPath(rid, after)).data.type == resource.data.get('sexe', '')
+              && getAfter(roomPath(rid, after)).data.occupes == get(roomPath(rid, after)).data.get('occupes', 0) + 1))
+        && (before == '' || !exists(roomPath(rid, before))
+              || getAfter(roomPath(rid, before)).data.occupes == get(roomPath(rid, before)).data.get('occupes', 0) - 1);
+    }
+
+    // Compteur d'une chambre modifié par un retraitant : +1 s'il y entre, -1 s'il en sort.
+    function roomCountOk(rid, cid) {
+      let b = get(insPath(rid)).data.get('chambreId', '');
+      let a = getAfter(insPath(rid)).data.get('chambreId', '');
+      let o = resource.data.get('occupes', 0);
+      let n = request.resource.data.occupes;
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['occupes'])
+        && ((a == cid && b != cid && n == o + 1 && n <= resource.data.lits
+              && resource.data.type == get(insPath(rid)).data.get('sexe', ''))
+          || (b == cid && a != cid && n == o - 1));
+    }
+
+    match /organisateurs/{email} {
+      allow get: if signed() && (email == myEmail() || isAdmin());
+      allow list, write: if isAdmin();
+    }
+
+    match /acces/{email} {
+      allow get: if signed() && email == myEmail();
+      allow read, write: if isAdmin();
+    }
+
+    match /retraites/{rid} {
+      allow read: if isAdmin() || isParticipant(rid);
+      allow write: if isAdmin();
+
+      match /programme/{pid} {
+        allow read: if isAdmin() || isParticipant(rid);
+        allow write: if isAdmin();
+      }
+
+      match /chambres/{cid} {
+        allow read: if isAdmin() || isParticipant(rid);
+        allow write: if isAdmin();
+        allow update: if isParticipant(rid) && beforeDeadline(rid) && roomCountOk(rid, cid);
+      }
+
+      match /inscrits/{email} {
+        allow read, write: if isAdmin();
+        allow get: if isParticipant(rid) && email == myEmail();
+        allow update: if isParticipant(rid) && email == myEmail()
+          && (profileOk() || (beforeDeadline(rid) && roomChoiceOk(rid)));
+      }
+    }
+  }
+}

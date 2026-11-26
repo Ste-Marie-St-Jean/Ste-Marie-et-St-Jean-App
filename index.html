@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="fr"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Retraites · Sainte Marie et Saint Jean</title>
+<meta name="description" content="Retraites spirituelles de l'Église copte orthodoxe Sainte Marie et Saint Jean.">
+<meta name="theme-color" content="#6e1a1f">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Retraites">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head><body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><symbol id="copte" viewBox="0 0 24 24"><g fill="#c9a04e"><g id="bras"><path d="M10.2 12V5.2h3.6V12z"/><circle cx="12" cy="2.6" r="2.3"/><circle cx="8.3" cy="4.9" r="2"/><circle cx="15.7" cy="4.9" r="2"/></g><use href="#bras" transform="rotate(90 12 12)"/><use href="#bras" transform="rotate(180 12 12)"/><use href="#bras" transform="rotate(270 12 12)"/><rect x="9.4" y="9.4" width="5.2" height="5.2" transform="rotate(45 12 12)"/></g></symbol></defs></svg>
+
+<!-- Écrans d'accueil : connexion, vérification, profil, accès refusé -->
+<div id="gate" class="gate"><div class="card" id="gatecard"><p class="spin">Chargement…</p></div></div>
+
+<!-- Application -->
+<div id="app" hidden>
+<header class="band"><div class="wrap">
+ <div class="top">
+  <div class="brand"><img src="logo.png" alt="Sceau de l'Église copte orthodoxe Sainte Marie et Saint Jean"><div><div class="eb"><svg class="cc" viewBox="0 0 24 24" aria-hidden="true"><use href="#copte"/></svg><span>ÉGLISE COPTE ORTHODOXE</span><svg class="cc" viewBox="0 0 24 24" aria-hidden="true"><use href="#copte"/></svg></div><div class="ch">Sainte Marie et Saint Jean</div></div></div>
+  <div class="ctl"><select id="pick" aria-label="Retraite affichée" hidden></select><div class="who-am-i"><span id="whoami"></span><button id="logout" type="button">Se déconnecter</button></div></div>
+ </div>
+ <div id="hero"></div>
+</div></header>
+<main class="wrap"><div id="msg"></div><div id="tools"></div><div id="list"></div></main>
+<nav class="tabbar" id="tabs" aria-label="Rubriques"></nav>
+</div>
+
+<div class="ov" id="ov"><form class="dlg" id="dlg" novalidate></form></div>
+<div id="toast" role="status"></div>
+<script type="module" src="app.js"></script>
+<script>if('serviceWorker' in navigator)addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}))</script>
+</body></html>
