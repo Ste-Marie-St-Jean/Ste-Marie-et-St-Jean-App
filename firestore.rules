@@ -110,6 +110,11 @@ service cloud.firestore {
         allow update: if isParticipant(rid) && beforeDeadline(rid) && roomCountOk(rid, cid);
       }
 
+      // Fiche confidentielle : organisateurs uniquement (le retraitant lui-même n'y a pas accès).
+      match /fiches/{email} {
+        allow read, write: if isAdmin();
+      }
+
       match /inscrits/{email} {
         allow read, write: if isAdmin();
         allow get: if isParticipant(rid) && email == myEmail();

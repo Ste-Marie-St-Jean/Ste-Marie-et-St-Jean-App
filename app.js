@@ -58,7 +58,7 @@ function dbErr(e) {
 }
 
 /* ---------- état ---------- */
-const S = {user:null, admin:false, rets:[], rid:null, ret:null, prog:[], rooms:[], ins:[], orgs:[], me:null, myRets:[], q:'', fStat:'', toolsKey:'', editing:null};
+const S = {fiches:[], user:null, admin:false, rets:[], rid:null, ret:null, prog:[], rooms:[], ins:[], orgs:[], me:null, myRets:[], q:'', fStat:'', toolsKey:'', editing:null};
 let unsubs = [], retUnsub = null, orgUnsub = null;
 const stopAll = () => { unsubs.forEach(u => u()); unsubs = []; retUnsub && retUnsub(); retUnsub = null; orgUnsub && orgUnsub(); orgUnsub = null };
 const ADM = () => S.admin && !S.preview;          // vue organisateur (hors aperçu)
@@ -195,6 +195,7 @@ function subRetreat(onFirst) {
   unsubs.push(onSnapshot(collection(db, ...base, 'programme'), s => { S.prog = s.docs.map(d => ({id: d.id, ...d.data()})); render() }, fail));
   unsubs.push(onSnapshot(collection(db, ...base, 'chambres'), s => { S.rooms = s.docs.map(d => ({id: d.id, ...d.data()})); render() }, fail));
   if (S.admin) unsubs.push(onSnapshot(collection(db, ...base, 'inscrits'), s => { S.ins = s.docs.map(d => ({id: d.id, ...d.data()})); render() }, fail));
+  if (S.admin) { S.fiches = []; unsubs.push(onSnapshot(collection(db, ...base, 'fiches'), s => { S.fiches = s.docs.map(d => ({id: d.id, ...d.data()})); render() }, fail)) }
   else unsubs.push(onSnapshot(doc(db, ...base, 'inscrits', low(S.user.email)), s => {
     S.me = s.exists() ? {id: s.id, ...s.data()} : null;
     if (!S.me || S.me.statut !== 'Confirmée') return deniedScreen(low(S.user.email), 'Votre inscription n’est plus confirmée. Contactez les organisateurs.');
@@ -265,7 +266,8 @@ function open_() { const r = S.ret; return !!r && (!r.limiteChambresTs || r.limi
 /* ---------- formulaires ---------- */
 const F = {
   retraites: {t:'retraite', f:[['titre','Titre','text',1],['theme','Thème'],['debut','Arrivée','date',1],['fin','Départ','date',1],['lieu','Lieu'],['animateur','Prédicateur / animateur'],['capacite','Capacité (personnes)','number'],['prix','Prix par personne (€)','number'],['accueil','Horaires d’accueil et de départ'],['dateLimiteChambres','Date limite du choix des chambres','date'],['description','Présentation courte','textarea']]},
-  inscrits: {t:'inscription', f:[['prenom','Prénom','text',1],['nom','Nom','text',1],['email','E-mail (sert à la connexion)','email',1],['tel','Téléphone','tel'],['ville','Ville'],['statut','Statut',STATUTS],['sexe','Sexe',[['','— Non renseigné —'],['H','Homme'],['F','Femme']]],['naissance','Date de naissance','date'],['montant','Montant réglé (€)','number'],['chambreId','Chambre','chambre'],['regime','Régime / allergies'],['notes','Notes (accompagnement, santé, transport…)','textarea']]},
+  inscrits: {t:'inscription', f:[['prenom','Prénom','text',1],['nom','Nom','text',1],['email','E-mail (sert à la connexion)','email',1],['tel','Téléphone','tel'],['ville','Ville'],['statut','Statut',STATUTS],['sexe','Sexe',[['','— Non renseigné —'],['H','Homme'],['F','Femme']]],['naissance','Date de naissance','date'],['montant','Montant réglé (€)','number'],['chambreId','Chambre','chambre'],['regime','Régime alimentaire (visible par le retraitant)']]},
+  fiche: {t:'fiche', f:[['urgenceNom','Personne à contacter en cas d’urgence (nom, lien)'],['urgenceTel','Téléphone d’urgence','tel'],['allergies','Allergies (détail)','textarea'],['sante','Santé : traitements, handicap, informations utiles','textarea'],['remarques','Remarques du retraitant','textarea'],['notesOrg','Notes des organisateurs','textarea']]},
   chambres: {t:'chambre', f:[['nom','Nom de la chambre','text',1],['type','Réservée aux',[['H','Hommes'],['F','Femmes']]],['lits','Nombre de places','number',1],['batiment','Bâtiment / étage'],['pmr','Accessible PMR',['Non','Oui']]]},
   programme: {t:'activité', f:[['date','Jour','date',1],['heure','Début','time',1],['fin','Fin','time'],['titre','Activité','text',1],['type','Type',Object.keys(TYPES)],['lieu','Lieu'],['intervenant','Intervenant']]},
   rubrique: {t:'rubrique', f:[['titre','Titre de la rubrique','text',1],['texte','Contenu','textarea'],['lien','Adresse pour le lien itinéraire (facultatif)']]},
@@ -302,6 +304,7 @@ $('#dlg').addEventListener('submit', async e => {
   try {
     if (col === 'retraites') await saveRetreat(o, id);
     else if (col === 'inscrits') await saveIns(o, obj);
+    else if (col === 'fiche') await saveFiche(o, obj);
     else if (col === 'chambres') await saveRoom(o, obj);
     else if (col === 'programme') { const ref = id ? doc(db, 'retraites', S.rid, 'programme', id) : doc(collection(db, 'retraites', S.rid, 'programme')); await setDoc(ref, o) }
     else if (col === 'rubrique') await saveRub(o, id);
@@ -367,6 +370,7 @@ const stripId = x => { const {id, ...y} = x; return y };
 async function deleteIns(i) {
   const b = writeBatch(db);
   b.delete(doc(db, 'retraites', S.rid, 'inscrits', i.id));
+  b.delete(doc(db, 'retraites', S.rid, 'fiches', i.id));
   if (i.chambreId && S.rooms.some(c => c.id === i.chambreId)) b.update(doc(db, 'retraites', S.rid, 'chambres', i.chambreId), {occupes: increment(-1)});
   b.set(doc(db, 'acces', i.id), {r: {[S.rid]: deleteField()}}, {merge: true});
   await b.commit();
@@ -396,7 +400,7 @@ async function copyRooms(fromId) {
 }
 async function deleteRetreat(id) {
   const ops = [];
-  for (const sub of ['programme', 'chambres', 'inscrits']) {
+  for (const sub of ['programme', 'chambres', 'inscrits', 'fiches']) {
     const s = await getDocs(collection(db, 'retraites', id, sub));
     s.forEach(d => { ops.push(['del', d.ref]); if (sub === 'inscrits') ops.push(['acces', d.id]) });
   }
@@ -427,6 +431,30 @@ function withTel(t) {
   return out + esc(t.slice(last));
 }
 
+/* ---------- fiche confidentielle (organisateurs uniquement) ---------- */
+const ficheOf = id => S.fiches.find(f => f.id === id) || {};
+function ficheDlg(i) {
+  const f = {...ficheOf(i.id)}; if (!f.notesOrg && i.notes) f.notesOrg = i.notes;
+  const ch = S.rooms.find(c => c.id === i.chambreId), a = age(i.naissance);
+  const field = ([k, l, t = 'text']) => `<label><span>${esc(l)}</span>${t === 'textarea' ? `<textarea name="${k}" rows="2">${esc(f[k] || '')}</textarea>` : `<input name="${k}" type="${t}" value="${esc(f[k] || '')}">`}</label>`;
+  const extra = Object.entries(f.extra || {}).filter(([, v]) => v);
+  openDlg(`<h2>${esc(name(i))}</h2><p class="conf">Fiche confidentielle — visible uniquement par les organisateurs</p>
+   <dl class="fdl"><dt>E-mail</dt><dd>${esc(i.email || i.id)}</dd>${i.tel ? `<dt>Téléphone</dt><dd><a href="tel:${esc(i.tel.replace(/[^\d+]/g, ''))}">${esc(i.tel)}</a></dd>` : ''}${i.ville ? `<dt>Ville</dt><dd>${esc(i.ville)}</dd>` : ''}
+   <dt>Fiche</dt><dd>${i.sexe ? `${SEXE[i.sexe]} · ${fmt(i.naissance, {day:'2-digit', month:'2-digit', year:'numeric'})}${a !== null ? ` · ${a} ans` : ''}` : 'non remplie'}</dd>
+   <dt>Statut</dt><dd>${esc(i.statut || '—')}</dd><dt>Chambre</dt><dd>${ch ? esc(ch.nom) : '—'}</dd>${i.regime ? `<dt>Régime</dt><dd>${esc(i.regime)}</dd>` : ''}</dl>
+   ${f.urgenceTel ? `<a class="btn urg" href="tel:${esc(f.urgenceTel.replace(/[^\d+]/g, ''))}">${TELICO}Appeler le contact d’urgence${f.urgenceNom ? ' (' + esc(f.urgenceNom) + ')' : ''}</a>` : ''}
+   <div class="grid2">${F.fiche.f.slice(0, 2).map(field).join('')}</div>${F.fiche.f.slice(2).map(field).join('')}
+   ${extra.length ? `<details class="fextra" open><summary>Autres réponses du formulaire (${extra.length})</summary><dl class="fdl">${extra.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl></details>` : ''}
+   <p class="bad" id="err" role="alert"></p>
+   <div class="acts"><span class="sp"></span><button type="button" data-close>Fermer</button><button class="pri">Enregistrer la fiche</button></div>`, {col: 'fiche', id: i.id, obj: i});
+}
+async function saveFiche(o, i) {
+  const b = writeBatch(db);
+  b.set(doc(db, 'retraites', S.rid, 'fiches', i.id), {...o, majLe: today()}, {merge: true});
+  if (i.notes) b.update(doc(db, 'retraites', S.rid, 'inscrits', i.id), {notes: deleteField()});
+  await b.commit();
+}
+
 /* ---------- import des réponses Google Forms / tableur ---------- */
 function parseTable(txt) {
   txt = String(txt || '').replace(/\r\n?/g, '\n').replace(/^﻿/, '');
@@ -453,12 +481,16 @@ function mapHeaders(head) {
     else if (/prenom/.test(h) && /\bnom\b/.test(h.replace(/prenom/g, ''))) m.full = i;
     else if (m.prenom === undefined && /(prenom|first ?name)/.test(h)) m.prenom = i;
     else if (m.nom === undefined && /(^nom\b|nom de famille|last ?name|^name$|^nom$)/.test(h)) m.nom = i;
+    else if (/urgence|emergency/.test(h) && /(tel|phone|portable|numero|mobile)/.test(h)) m.urgenceTel = i;
+    else if (/urgence|emergency/.test(h)) m.urgenceNom = i;
+    else if (m.sante === undefined && /(sante|medical|traitement|medicament|handicap)/.test(h)) m.sante = i;
     else if (m.tel === undefined && /(tel|phone|portable|mobile)/.test(h)) m.tel = i;
     else if (m.ville === undefined && /(ville|city|commune)/.test(h)) m.ville = i;
     else if (m.regime === undefined && /(regime|allerg|aliment)/.test(h)) m.regime = i;
     else if (m.sexe === undefined && /(sexe|genre)/.test(h)) m.sexe = i;
     else if (m.naissance === undefined && /(naissance|birth)/.test(h)) m.naissance = i;
     else if (m.notes === undefined && /(remarque|commentaire|note|message|precision)/.test(h)) m.notes = i;
+    else if (!/(horodateur|timestamp|horodatage|consentement|accepte|score|rgpd)/.test(h)) (m.extra = m.extra || []).push(i);
   });
   return m;
 }
@@ -470,7 +502,7 @@ function toISO(d) {
 }
 function analyseImport(txt) {
   const rows = parseTable(txt); if (!rows.length) return {err: 'Rien à importer : collez les lignes copiées depuis Google Sheets.'};
-  let m = mapHeaders(rows[0]), data = rows.slice(1);
+  let m = mapHeaders(rows[0]), data = rows.slice(1); const head = rows[0];
   if (m.email === undefined) { // pas de ligne de titres : on cherche la colonne qui contient des adresses
     const col = rows[0].findIndex(c => EMAIL_RE.test(c)); if (col < 0) return {err: 'Impossible de trouver la colonne « Adresse e-mail ». Copiez aussi la ligne des titres.'};
     m = {email: col}; data = rows;
@@ -482,7 +514,9 @@ function analyseImport(txt) {
     let prenom = g('prenom'), nom = g('nom');
     if (!prenom && !nom && m.full !== undefined) { const p = g('full').split(/\s+/); prenom = p.shift() || ''; nom = p.join(' ') }
     const sx = norm(g('sexe')), sexe = /^(h|m)/.test(sx) ? 'H' : /^f/.test(sx) ? 'F' : '', naissance = toISO(g('naissance'));
-    const p = {email, prenom, nom, tel: g('tel'), ville: g('ville'), regime: g('regime'), notes: g('notes')};
+    const p = {email, prenom, nom, tel: g('tel'), ville: g('ville'), regime: g('regime')};
+    const ex = {}; (m.extra || []).forEach(k => { if ((r[k] || '').trim()) ex[head[k]] = r[k].trim() });
+    p.fiche = {urgenceNom: g('urgenceNom'), urgenceTel: g('urgenceTel'), sante: g('sante'), remarques: g('notes'), extra: ex};
     if (sexe && naissance && naissance < today()) Object.assign(p, {sexe, naissance, profilLe: today()});
     p.etat = !EMAIL_RE.test(email) ? 'invalide' : known.has(email) ? 'deja' : seen.has(email) ? 'double' : 'nouveau';
     if (EMAIL_RE.test(email)) seen.add(email);
@@ -513,10 +547,11 @@ async function runImport(btn) {
   if (!IMP || !IMP.length) return;
   const statut = $('#impstat').value, rid = S.rid, list = IMP; btn.disabled = true; btn.textContent = 'Import en cours…';
   try {
-    for (let k = 0; k < list.length; k += 200) {
+    for (let k = 0; k < list.length; k += 150) {
       const b = writeBatch(db);
-      list.slice(k, k + 200).forEach(({etat, ...p}) => {
+      list.slice(k, k + 150).forEach(({etat, fiche, ...p}) => {
         b.set(doc(db, 'retraites', rid, 'inscrits', p.email), {...p, statut, montant: '', chambreId: '', inscritLe: today(), source: 'import'});
+        b.set(doc(db, 'retraites', rid, 'fiches', p.email), {...fiche, majLe: today()}, {merge: true});
         if (statut === 'Confirmée') b.set(doc(db, 'acces', p.email), {r: {[rid]: true}}, {merge: true});
       });
       await b.commit();
@@ -536,15 +571,15 @@ function vInscr(r) {
   if (!L.length) { $('#list').innerHTML = '<div class="empty">Aucun inscrit ne correspond à cette recherche.</div>'; return }
   const st = s => ({'Confirmée':'ok', 'En attente':'warn', "Liste d'attente":'mu', 'Annulée':'bad'})[s] || 'mu';
   const pay = i => { const p = +i.montant || 0, px = +r.prix || 0; if (i.statut === 'Annulée') return ['mu', '—']; if (px > 0 && p >= px) return ['ok', 'Réglé']; if (p > 0) return ['warn', 'Acompte']; return ['bad', 'À régler'] };
-  $('#list').innerHTML = `<table class="stack"><thead><tr><th>Retraitant</th><th>Statut</th><th>Fiche</th><th>Paiement</th><th>Chambre</th><th>Régime / notes</th><th></th></tr></thead><tbody>${L.map(i => {
+  $('#list').innerHTML = `<table class="stack"><thead><tr><th>Retraitant</th><th>Statut</th><th>Fiche</th><th>Paiement</th><th>Chambre</th><th>Urgence / santé</th><th></th></tr></thead><tbody>${L.map(i => {
     const [pc, pl] = pay(i), ch = S.rooms.find(c => c.id === i.chambreId), a = age(i.naissance);
     return `<tr><td class="who"><b>${esc(name(i))}</b><small>${[i.email, i.tel, i.ville].filter(Boolean).map(esc).join(' · ')}</small></td>
     <td><span class="tag ${st(i.statut)}">${esc(i.statut || '—')}</span></td>
     <td>${i.sexe ? `<span class="badge-${i.sexe.toLowerCase()}">${SEXE[i.sexe]}</span><br><span class="dim">${fmt(i.naissance, {day:'2-digit', month:'2-digit', year:'numeric'})}${a !== null ? ` · ${a} ans` : ''}</span>` : '<span class="dim">Non remplie</span>'}</td>
     <td><span class="tag ${pc}">${pl}</span><br><span class="dim">${eur(i.montant)} / ${eur(r.prix)}</span></td>
     <td>${ch ? esc(ch.nom) : '<span class="dim">—</span>'}</td>
-    <td class="dim">${esc([i.regime, i.notes].filter(Boolean).join(' — '))}</td>
-    <td><button class="sm" data-edit="inscrits:${esc(i.id)}">Modifier</button></td></tr>` }).join('')}</tbody></table><p class="dim">${L.length} sur ${all} inscription${all > 1 ? 's' : ''}.</p>`;
+    <td class="dim">${(fi => [fi.urgenceNom || fi.urgenceTel ? `🚨 ${esc([fi.urgenceNom, fi.urgenceTel].filter(Boolean).join(' · '))}` : '', [i.regime, fi.allergies, fi.sante].filter(Boolean).map(esc).join(' — ')].filter(Boolean).join('<br>'))(ficheOf(i.id))}</td>
+    <td><div class="rowbtns"><button class="sm" data-fiche="${esc(i.id)}">Fiche</button><button class="sm" data-edit="inscrits:${esc(i.id)}">Modifier</button></div></td></tr>` }).join('')}</tbody></table><p class="dim">${L.length} sur ${all} inscription${all > 1 ? 's' : ''}.</p>`;
 }
 
 function vProg(r) {
@@ -708,6 +743,7 @@ document.addEventListener('click', async e => {
   if (b.dataset.new === 'rubrique') return form('rubrique', null, {});
   if (b.id === 'annpub') return publishAnn();
   if (b.id === 'importbtn') return importDlg();
+  if (b.dataset.fiche) { const i = S.ins.find(x => x.id === b.dataset.fiche); return i && ficheDlg(i) }
   if (b.dataset.anndel) { if (!b.dataset.ok) { b.dataset.ok = 1; b.textContent = 'Confirmer'; return } b.disabled = true; try { await updateDoc(doc(db, 'retraites', S.rid), {annonces: ((S.ret && S.ret.annonces) || []).filter(a => a.id !== b.dataset.anndel)}); toast('Annonce supprimée.') } catch (x) { toast(dbErr(x)) } return }
   if (b.dataset.new === 'equipe') return S.resp ? form('equipe', null, {role: 'organisateur'}) : toast('Seul le responsable peut ajouter des organisateurs.');
   if (b.dataset.new) { const pre = b.dataset.new === 'inscrits' ? {statut:'Confirmée'} : b.dataset.new === 'programme' ? {date: b.dataset.day || S.ret.debut, type:'Office / prière'} : b.dataset.new === 'chambres' ? {lits: 1, type:'H', pmr:'Non'} : {}; return form(b.dataset.new, null, pre) }
@@ -718,7 +754,7 @@ document.addEventListener('click', async e => {
   if (b.dataset.unassign) { b.disabled = true; return assign(b.dataset.unassign, '') }
   if (b.id === 'recount') { b.disabled = true; try { await recount() } catch (x) { toast(dbErr(x)) } b.disabled = false; return }
   if (b.id === 'copy') {
-    const rows = [['Nom','Prénom','E-mail','Statut','Sexe','Naissance','Âge','Téléphone','Ville','Réglé (€)','Chambre','Régime','Notes'], ...[...S.ins].sort(byName).map(i => [i.nom, i.prenom, i.email, i.statut, SEXE[i.sexe] || '', i.naissance || '', age(i.naissance) ?? '', i.tel, i.ville, i.montant, (S.rooms.find(c => c.id === i.chambreId) || {}).nom, i.regime, i.notes])];
+    const rows = [['Nom','Prénom','E-mail','Statut','Sexe','Naissance','Âge','Téléphone','Ville','Réglé (€)','Chambre','Régime','Urgence (nom)','Urgence (tél.)','Allergies','Santé','Notes organisateurs'], ...[...S.ins].sort(byName).map(i => [i.nom, i.prenom, i.email, i.statut, SEXE[i.sexe] || '', i.naissance || '', age(i.naissance) ?? '', i.tel, i.ville, i.montant, (S.rooms.find(c => c.id === i.chambreId) || {}).nom, i.regime, ficheOf(i.id).urgenceNom, ficheOf(i.id).urgenceTel, ficheOf(i.id).allergies, ficheOf(i.id).sante, ficheOf(i.id).notesOrg || i.notes])];
     try { await navigator.clipboard.writeText(rows.map(r => r.map(v => String(v ?? '').replace(/[\t\n]/g, ' ')).join('\t')).join('\n')); toast('Liste copiée : collez-la dans un tableur.') } catch (x) { toast('Copie refusée par le navigateur.') }
   }
 });

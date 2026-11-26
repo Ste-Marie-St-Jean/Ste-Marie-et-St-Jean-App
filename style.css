@@ -228,3 +228,11 @@ body{min-height:100vh;min-height:100dvh}
 .btn.wa svg{width:16px;height:16px;fill:currentColor}
 @media(max-width:600px){.annlist li{flex-direction:column}.annbtns{align-self:flex-end}}
 .dlg .scroll table{font-size:14px}.dlg .scroll td,.dlg .scroll th{padding:6px 8px}
+
+/* fiche confidentielle */
+.conf{display:inline-block;margin:-8px 0 14px;font-size:13px;font-weight:600;color:var(--bad);background:light-dark(#fbe9ea,#3a1c20);padding:3px 10px;border-radius:99px}
+.fdl{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:0 0 14px;font-size:15px}.fdl dt{color:var(--mut)}.fdl dd{margin:0;white-space:pre-line}.fdl a{color:var(--vi);font-weight:600}
+.btn.urg{background:var(--bad);color:#fff;margin:0 0 14px;width:100%;justify-content:center}
+.btn.urg svg{fill:currentColor}
+.fextra{margin:4px 0 8px;border-top:1px solid var(--line);padding-top:8px}.fextra summary{cursor:pointer;font-weight:600;color:var(--vi);margin-bottom:8px}
+.rowbtns{display:flex;gap:6px;flex-wrap:wrap}
