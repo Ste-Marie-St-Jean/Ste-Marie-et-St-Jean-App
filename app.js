@@ -295,7 +295,7 @@ function form(col, obj, preset) {
 }
 
 $('#dlg').addEventListener('submit', async e => {
-  e.preventDefault(); const ed = S.editing; if (!ed || ed.col === 'info' || ed.col === 'tel' || ed.col === 'pick') return;
+  e.preventDefault(); const ed = S.editing; if (!ed || ['info', 'tel', 'pick', 'import'].includes(ed.col)) return;
   const {col, id, obj} = ed, fd = new FormData(e.target), o = {}, err = t => { $('#err').textContent = t };
   for (const [k, , t, req] of F[col].f) { let v = (fd.get(k) ?? '').toString().trim(); if (t === 'number') v = v === '' ? '' : Number(v); if (req && v === '') return err('Merci de remplir les champs marqués *.'); o[k] = v }
   const btn = e.target.querySelector('button.pri'); btn.disabled = true;
@@ -314,6 +314,8 @@ $('#dlg').addEventListener('click', async e => {
   if (e.target.closest('#tgo')) return setTimeout(closeDlg, 300);
   if (e.target.id === 'tcopy') { try { await navigator.clipboard.writeText(e.target.dataset.n); toast('Numéro copié.') } catch (x) { toast('Copie impossible : notez le numéro affiché.') } return }
   if (e.target.id === 'pickgo') return chooseRoom(e.target.dataset.cid, e.target);
+  if (e.target.id === 'impan') return showImport();
+  if (e.target.id === 'impgo') return runImport(e.target);
   if (e.target.id !== 'del') return;
   const b = e.target, ed = S.editing;
   if (!ed.confirm) { ed.confirm = true; b.textContent = ed.col === 'retraites' ? 'Confirmer : tout supprimer (inscrits, chambres, programme)' : 'Confirmer la suppression'; return }
@@ -425,9 +427,107 @@ function withTel(t) {
   return out + esc(t.slice(last));
 }
 
+/* ---------- import des réponses Google Forms / tableur ---------- */
+function parseTable(txt) {
+  txt = String(txt || '').replace(/\r\n?/g, '\n').replace(/^﻿/, '');
+  const first = txt.split('\n')[0] || '';
+  const sep = first.includes('\t') ? '\t' : (first.split(';').length > first.split(',').length ? ';' : ',');
+  const rows = []; let row = [], cell = '', q = false;
+  for (let k = 0; k < txt.length; k++) {
+    const c = txt[k];
+    if (q) { if (c === '"') { if (txt[k + 1] === '"') { cell += '"'; k++ } else q = false } else cell += c }
+    else if (c === '"' && cell === '') q = true;
+    else if (c === sep) { row.push(cell); cell = '' }
+    else if (c === '\n') { row.push(cell); rows.push(row); row = []; cell = '' }
+    else cell += c;
+  }
+  if (cell !== '' || row.length) { row.push(cell); rows.push(row) }
+  return rows.map(r => r.map(x => x.trim())).filter(r => r.some(x => x));
+}
+const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+function mapHeaders(head) {
+  const m = {};
+  head.forEach((h0, i) => { const h = norm(h0);
+    if (m.email === undefined && /(e-?mail|courriel|adresse e)/.test(h)) m.email = i;
+    else if (/prenom/.test(h) && /\bnom\b/.test(h.replace(/prenom/g, ''))) m.full = i;
+    else if (m.prenom === undefined && /(prenom|first ?name)/.test(h)) m.prenom = i;
+    else if (m.nom === undefined && /(^nom\b|nom de famille|last ?name|^name$|^nom$)/.test(h)) m.nom = i;
+    else if (m.tel === undefined && /(tel|phone|portable|mobile)/.test(h)) m.tel = i;
+    else if (m.ville === undefined && /(ville|city|commune)/.test(h)) m.ville = i;
+    else if (m.regime === undefined && /(regime|allerg|aliment)/.test(h)) m.regime = i;
+    else if (m.sexe === undefined && /(sexe|genre)/.test(h)) m.sexe = i;
+    else if (m.naissance === undefined && /(naissance|birth)/.test(h)) m.naissance = i;
+    else if (m.notes === undefined && /(remarque|commentaire|note|message|precision)/.test(h)) m.notes = i;
+  });
+  return m;
+}
+function toISO(d) {
+  d = String(d || '').trim(); let x;
+  if ((x = d.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))) return `${x[1]}-${x[2].padStart(2, '0')}-${x[3].padStart(2, '0')}`;
+  if ((x = d.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})/))) return `${x[3]}-${x[2].padStart(2, '0')}-${x[1].padStart(2, '0')}`;
+  return '';
+}
+function analyseImport(txt) {
+  const rows = parseTable(txt); if (!rows.length) return {err: 'Rien à importer : collez les lignes copiées depuis Google Sheets.'};
+  let m = mapHeaders(rows[0]), data = rows.slice(1);
+  if (m.email === undefined) { // pas de ligne de titres : on cherche la colonne qui contient des adresses
+    const col = rows[0].findIndex(c => EMAIL_RE.test(c)); if (col < 0) return {err: 'Impossible de trouver la colonne « Adresse e-mail ». Copiez aussi la ligne des titres.'};
+    m = {email: col}; data = rows;
+  }
+  const known = new Set(S.ins.map(i => i.id)), seen = new Set(), out = [];
+  for (const r of data) {
+    const g = k => m[k] !== undefined ? (r[m[k]] || '').trim() : '';
+    const email = low(g('email'));
+    let prenom = g('prenom'), nom = g('nom');
+    if (!prenom && !nom && m.full !== undefined) { const p = g('full').split(/\s+/); prenom = p.shift() || ''; nom = p.join(' ') }
+    const sx = norm(g('sexe')), sexe = /^(h|m)/.test(sx) ? 'H' : /^f/.test(sx) ? 'F' : '', naissance = toISO(g('naissance'));
+    const p = {email, prenom, nom, tel: g('tel'), ville: g('ville'), regime: g('regime'), notes: g('notes')};
+    if (sexe && naissance && naissance < today()) Object.assign(p, {sexe, naissance, profilLe: today()});
+    p.etat = !EMAIL_RE.test(email) ? 'invalide' : known.has(email) ? 'deja' : seen.has(email) ? 'double' : 'nouveau';
+    if (EMAIL_RE.test(email)) seen.add(email);
+    out.push(p);
+  }
+  return {rows: out, cols: Object.keys(m)};
+}
+function importDlg() {
+  openDlg(`<h2>Importer des inscrits</h2>
+   <p class="dim" style="margin-top:0">Dans le tableau Google Sheets des réponses, sélectionnez les lignes <b>avec la ligne des titres</b>, copiez, puis collez ici. Les colonnes Prénom, Nom, Adresse e-mail, Téléphone, Ville, Régime… sont reconnues automatiquement.</p>
+   <label><span>Lignes copiées</span><textarea id="imptxt" rows="6" placeholder="Horodateur	Adresse e-mail	Prénom	Nom	Téléphone…"></textarea></label>
+   <label><span>Statut donné aux personnes importées</span><select id="impstat">${STATUTS.map(s => `<option${s === 'Confirmée' ? ' selected' : ''}>${esc(s)}</option>`).join('')}</select></label>
+   <div id="impprev"></div><p class="bad" id="err" role="alert"></p>
+   <div class="acts"><span class="sp"></span><button type="button" data-close>Annuler</button><button type="button" id="impan">Vérifier</button><button type="button" class="pri" id="impgo" disabled>Importer</button></div>`, {col: 'import'});
+}
+let IMP = null;
+function showImport() {
+  const res = analyseImport($('#imptxt').value); $('#err').textContent = ''; $('#impprev').innerHTML = '';
+  IMP = null; const go = $('#impgo'); go.disabled = true; go.textContent = 'Importer';
+  if (res.err) { $('#err').textContent = res.err; return }
+  const R = res.rows, n = R.filter(x => x.etat === 'nouveau'), lab = {nouveau: ['ok', 'Nouveau'], deja: ['mu', 'Déjà inscrit'], double: ['mu', 'En double'], invalide: ['bad', 'E-mail invalide']};
+  $('#impprev').innerHTML = `<p class="note"><b>${n.length}</b> nouvelle${n.length > 1 ? 's' : ''} personne${n.length > 1 ? 's' : ''} à ajouter${R.length - n.length ? ` · ${R.length - n.length} ligne${R.length - n.length > 1 ? 's' : ''} ignorée${R.length - n.length > 1 ? 's' : ''}` : ''}.</p>
+   <div class="scroll" style="max-height:260px;overflow:auto"><table><thead><tr><th>Personne</th><th>E-mail</th><th></th></tr></thead><tbody>${R.map(x => `<tr><td>${esc(name(x)) || '<span class="dim">—</span>'}</td><td>${esc(x.email) || '<span class="dim">—</span>'}</td><td><span class="tag ${lab[x.etat][0]}">${lab[x.etat][1]}</span></td></tr>`).join('')}</tbody></table></div>
+   ${n.some(x => !x.prenom && !x.nom) ? '<p class="warn" style="font-size:14px">Certaines personnes n’ont ni prénom ni nom : vous pourrez les compléter ensuite avec « Modifier ».</p>' : ''}`;
+  if (n.length) { IMP = n; go.disabled = false; go.textContent = `Importer ${n.length} personne${n.length > 1 ? 's' : ''}` }
+}
+async function runImport(btn) {
+  if (!IMP || !IMP.length) return;
+  const statut = $('#impstat').value, rid = S.rid, list = IMP; btn.disabled = true; btn.textContent = 'Import en cours…';
+  try {
+    for (let k = 0; k < list.length; k += 200) {
+      const b = writeBatch(db);
+      list.slice(k, k + 200).forEach(({etat, ...p}) => {
+        b.set(doc(db, 'retraites', rid, 'inscrits', p.email), {...p, statut, montant: '', chambreId: '', inscritLe: today(), source: 'import'});
+        if (statut === 'Confirmée') b.set(doc(db, 'acces', p.email), {r: {[rid]: true}}, {merge: true});
+      });
+      await b.commit();
+    }
+    closeDlg(); toast(`${list.length} personne${list.length > 1 ? 's' : ''} importée${list.length > 1 ? 's' : ''}.`); IMP = null;
+  } catch (x) { btn.disabled = false; btn.textContent = 'Réessayer'; $('#err').textContent = dbErr(x) }
+}
+
 /* ---------- vues ---------- */
 function vInscr(r) {
-  tools('ins' + r.id, `<div class="tools"><h2>Registre des inscrits</h2><input id="q" type="search" placeholder="Rechercher un nom, une adresse…" value="${esc(S.q)}" aria-label="Rechercher"><select id="fs" aria-label="Filtrer par statut"><option value="">Tous les statuts</option>${STATUTS.map(s => `<option${s === S.fStat ? ' selected' : ''}>${esc(s)}</option>`).join('')}</select><button id="copy">Copier la liste</button><button class="pri" data-new="inscrits">Inscrire</button></div>`);
+  tools('ins' + r.id, `<div class="tools"><h2>Registre des inscrits</h2><input id="q" type="search" placeholder="Rechercher un nom, une adresse…" value="${esc(S.q)}" aria-label="Rechercher"><select id="fs" aria-label="Filtrer par statut"><option value="">Tous les statuts</option>${STATUTS.map(s => `<option${s === S.fStat ? ' selected' : ''}>${esc(s)}</option>`).join('')}</select><button id="copy">Copier la liste</button><button id="importbtn">Importer</button><button class="pri" data-new="inscrits">Inscrire</button></div>`);
   let L = [...S.ins]; const all = L.length, qq = S.q.toLowerCase();
   if (qq) L = L.filter(i => [i.prenom, i.nom, i.email, i.ville, i.tel].join(' ').toLowerCase().includes(qq));
   if (S.fStat) L = L.filter(i => i.statut === S.fStat);
@@ -607,6 +707,7 @@ document.addEventListener('click', async e => {
   if (!ADM()) return;
   if (b.dataset.new === 'rubrique') return form('rubrique', null, {});
   if (b.id === 'annpub') return publishAnn();
+  if (b.id === 'importbtn') return importDlg();
   if (b.dataset.anndel) { if (!b.dataset.ok) { b.dataset.ok = 1; b.textContent = 'Confirmer'; return } b.disabled = true; try { await updateDoc(doc(db, 'retraites', S.rid), {annonces: ((S.ret && S.ret.annonces) || []).filter(a => a.id !== b.dataset.anndel)}); toast('Annonce supprimée.') } catch (x) { toast(dbErr(x)) } return }
   if (b.dataset.new === 'equipe') return S.resp ? form('equipe', null, {role: 'organisateur'}) : toast('Seul le responsable peut ajouter des organisateurs.');
   if (b.dataset.new) { const pre = b.dataset.new === 'inscrits' ? {statut:'Confirmée'} : b.dataset.new === 'programme' ? {date: b.dataset.day || S.ret.debut, type:'Office / prière'} : b.dataset.new === 'chambres' ? {lits: 1, type:'H', pmr:'Non'} : {}; return form(b.dataset.new, null, pre) }
@@ -630,5 +731,5 @@ document.addEventListener('change', async e => {
   if (t.id === 'deadline') { try { await updateDoc(doc(db, 'retraites', S.rid), {dateLimiteChambres: t.value, limiteChambresTs: t.value ? endOfDay(t.value) : null}); toast(t.value ? 'Date limite enregistrée.' : 'Date limite retirée.') } catch (x) { toast(dbErr(x)) } return }
   if (t.dataset.assign && t.value) { t.disabled = true; return assign(t.value, t.dataset.assign) }
 });
-document.addEventListener('input', e => { if (e.target.id === 'q') { S.q = e.target.value; render() } });
+document.addEventListener('input', e => { if (e.target.id === 'q') { S.q = e.target.value; render() } if (e.target.id === 'imptxt') { IMP = null; const g = $('#impgo'); if (g) { g.disabled = true; g.textContent = 'Importer' } } });
 addEventListener('hashchange', () => { S.toolsKey = ''; render(); scrollTo({top: 0}) });
