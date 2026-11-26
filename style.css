@@ -173,3 +173,18 @@ mark{background:var(--gold);color:#2a1a1b;padding:0 4px;border-radius:3px}
 .pvin{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;padding-block:8px;font-size:15px}
 .pvin select{width:auto;max-width:100%;min-height:38px;padding:4px 10px;background:#fff8ec;color:#2a1a1b;border-color:#8a6a2a}
 .pvin .dim2{font-size:13px;opacity:.8}
+
+/* en-tête fixe : logo et nom de la paroisse, centrés, toujours visibles */
+.fixtop{position:sticky;top:0;z-index:9;box-shadow:0 4px 16px #0004}
+.pvbar{position:static;box-shadow:none}
+.topbar{background:var(--band);border-bottom:3px solid var(--gold);padding:calc(10px + env(safe-area-inset-top)) 16px 10px;display:flex;justify-content:center}
+.pvbar:not([hidden])+.topbar{padding-top:10px}
+.topbar .brand{gap:14px;justify-content:center;text-align:center}
+.topbar .brand img{width:58px;height:58px;box-shadow:0 0 0 2px var(--gold),0 0 0 4px #f6ece0}
+.topbar .brand .eb{justify-content:center;font-size:11.5px}
+.topbar .brand .ch{font-size:clamp(20px,2.6vw,28px)}
+.band{padding-top:16px}
+.band .top{justify-content:center;padding-bottom:16px;margin-bottom:24px}
+.band .ctl{justify-content:center}
+@media(max-width:600px){.topbar .brand{gap:10px}.topbar .brand img{width:46px;height:46px}.topbar .brand .eb{font-size:9.5px;letter-spacing:.12em}.topbar .brand .ch{font-size:18px}.band .ctl select{flex:1 1 100%}}
+.ov{z-index:20}#toast{z-index:21}
