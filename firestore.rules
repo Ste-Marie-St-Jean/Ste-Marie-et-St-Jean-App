@@ -110,6 +110,24 @@ service cloud.firestore {
         allow update: if isParticipant(rid) && beforeDeadline(rid) && roomCountOk(rid, cid);
       }
 
+      // Textes et méditations : lus par les retraitants, écrits par les organisateurs.
+      match /textes/{tid} {
+        allow read: if isAdmin() || isParticipant(rid);
+        allow write: if isAdmin();
+      }
+
+      // Avis de fin de retraite : chaque retraitant écrit et relit le sien ; les organisateurs lisent tout.
+      match /avis/{email} {
+        allow read, delete: if isAdmin();
+        allow get: if isParticipant(rid) && email == myEmail();
+        allow create, update: if isParticipant(rid) && email == myEmail()
+          && request.resource.data.keys().hasOnly(['notes', 'touche', 'ameliorer', 'theme', 'revenir', 'anonyme', 'le'])
+          && request.resource.data.notes is map
+          && request.resource.data.touche is string && request.resource.data.touche.size() <= 2000
+          && request.resource.data.ameliorer is string && request.resource.data.ameliorer.size() <= 2000
+          && request.resource.data.theme is string && request.resource.data.theme.size() <= 300;
+      }
+
       // Fiche confidentielle : organisateurs uniquement (le retraitant lui-même n'y a pas accès).
       match /fiches/{email} {
         allow read, write: if isAdmin();
