@@ -236,7 +236,8 @@ function render() {
     bar.innerHTML = `<div class="wrap pvin"><b>Mode aperçu</b><span>L’application telle que la voit</span><select id="pvsel" aria-label="Voir l’application comme"><option value="demoH"${S.pv === 'demoH' ? ' selected' : ''}>un retraitant (exemple homme)</option><option value="demoF"${S.pv === 'demoF' ? ' selected' : ''}>une retraitante (exemple femme)</option>${C.length ? `<optgroup label="Inscrits confirmés">${C.map(i => `<option value="${esc(i.id)}"${S.pv === i.id ? ' selected' : ''}>${esc(name(i))}${i.sexe ? '' : ' (fiche non remplie)'}</option>`).join('')}</optgroup>` : ''}</select><span class="dim2">Lecture seule : aucune action n’est enregistrée.</span></div>`;
   }
   $('#hero').innerHTML = hero(r);
-  $('#tabs').innerHTML = Object.entries(V()).map(([k, l]) => `<a href="#${k}" aria-label="${l}" title="${l}"${k === v ? ' aria-current="page"' : ''}><svg viewBox="0 0 24 24" aria-hidden="true">${ICO[k]}</svg></a>`).join('');
+  const unread = !ADM() && r && v !== 'infos' && hasUnread(r);
+  $('#tabs').innerHTML = Object.entries(V()).map(([k, l]) => `<a href="#${k}" aria-label="${l}${k === 'infos' && unread ? ' — nouvelle annonce' : ''}" title="${l}"${k === v ? ' aria-current="page"' : ''}${k === 'infos' && unread ? ' class="dotted"' : ''}><svg viewBox="0 0 24 24" aria-hidden="true">${ICO[k]}</svg></a>`).join('');
   if (!r && !['retraites', 'equipe'].includes(v)) {
     S.toolsKey = ''; $('#tools').innerHTML = '';
     $('#list').innerHTML = ADM() ? '<div class="empty"><h3>Aucune retraite</h3><p>Commencez par créer la première retraite.</p><button class="pri" data-new="retraites">Créer une retraite</button></div>' : '';
@@ -468,7 +469,8 @@ function vHome(r) {
   const px = +r.prix || 0, paid = +me.montant || 0;
   const contact = rubOf(r).find(x => /contact/i.test(x.titre || '') && x.texte);
   const card = (title, body, link) => `<section class="hcard"><h3>${title}</h3>${body}${link ? `<a class="hlink" href="#${link[0]}">${link[1]} →</a>` : ''}</section>`;
-  $('#list').innerHTML = `<div class="hcount"><span class="tag ok">${when}</span></div><div class="home">
+  const la = annOf(r)[0];
+  $('#list').innerHTML = `<div class="hcount"><span class="tag ok">${when}</span></div>${la ? `<a class="annhome" href="#infos"><b>Annonce</b><span>${esc(la.texte.length > 140 ? la.texte.slice(0, 140) + '…' : la.texte)}</span></a>` : ''}<div class="home">
   ${card('La retraite', `<p class="big">${esc(r.titre)}</p>${r.theme ? `<p class="it">${esc(r.theme)}</p>` : ''}
     <dl><dt>Dates</dt><dd>Du ${fmt(r.debut, {weekday:'long', day:'numeric', month:'long'})}<br>au ${fmt(r.fin, {weekday:'long', day:'numeric', month:'long', year:'numeric'})}${nuits ? ` · ${nuits} nuit${nuits > 1 ? 's' : ''}` : ''}</dd>
     ${r.accueil ? `<dt>Horaires</dt><dd>${esc(r.accueil)}</dd>` : ''}${r.lieu ? `<dt>Lieu</dt><dd>${esc(r.lieu)}</dd>` : ''}${r.animateur ? `<dt>Prédicateur</dt><dd>${esc(r.animateur)}</dd>` : ''}</dl>
@@ -538,10 +540,35 @@ function vRoomsAdmin(r) {
 
 function vInfos(r) {
   const ed = ADM(), L = rubOf(r), shown = ed ? L : L.filter(x => x.texte || x.lien);
-  tools('inf' + r.id + ed, `<div class="tools"><h2>Infos pratiques</h2>${ed ? '<button class="pri" data-new="rubrique">Ajouter une rubrique</button>' : ''}</div>`);
-  if (!shown.length) { $('#list').innerHTML = ed ? '<div class="empty"><h3>Aucune rubrique</h3><p>Ajoutez les informations utiles : lieu, horaires, affaires à apporter, contacts…</p><button class="pri" data-new="rubrique">Ajouter une rubrique</button></div>' : '<div class="empty"><h3>Infos à venir</h3><p>Les informations pratiques seront publiées ici prochainement.</p></div>'; return }
+  tools('inf' + r.id + ed, `<div class="tools"><h2>Infos pratiques</h2>${ed ? '<button class="pri" data-new="rubrique">Ajouter une rubrique</button>' : ''}</div>${ed ? `<section class="annadm"><h3>Nouvelle annonce</h3><p class="dim">L’annonce la plus récente s’affiche en haut des Infos pratiques et de l’accueil de chaque retraitant.</p>
+    <textarea id="anntext" rows="3" placeholder="Ex. : Rendez-vous à 16 h 30 devant l’église pour le covoiturage."></textarea>
+    <div class="acts" style="margin-top:8px"><span class="sp"></span><button class="pri" id="annpub">Publier l’annonce</button></div></section>` : ''}`);
+  const ann = annBlock(r, ed);
+  if (!ed && (r.annonces || []).length) markSeen(r);
+  if (!shown.length) { $('#list').innerHTML = ann + (ed ? '<div class="empty"><h3>Aucune rubrique</h3><p>Ajoutez les informations utiles : lieu, horaires, affaires à apporter, contacts…</p><button class="pri" data-new="rubrique">Ajouter une rubrique</button></div>' : '<div class="empty"><h3>Infos à venir</h3><p>Les informations pratiques seront publiées ici prochainement.</p></div>'); return }
   const map = a => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(String(a).replace(/\n/g, ' '))}`;
-  $('#list').innerHTML = `${ed ? '<p class="note">Ces rubriques sont visibles par les retraitants confirmés, dans cet ordre. Une rubrique vide ne leur est pas montrée.</p>' : ''}<div class="infos">${shown.map((x, k) => `<section class="info"><div class="ih"><h3>${esc(x.titre)}</h3>${ed ? `<div class="ib"><button class="sm" data-rmove="${k}:-1" aria-label="Monter"${k ? '' : ' disabled'}>↑</button><button class="sm" data-rmove="${k}:1" aria-label="Descendre"${k < shown.length - 1 ? '' : ' disabled'}>↓</button><button class="sm" data-redit="${esc(x.id)}">Modifier</button></div>` : ''}</div>${x.texte ? `<p>${withTel(x.texte)}</p>` : '<p class="dim">Vide — non montrée aux retraitants.</p>'}${x.lien ? `<a href="${esc(map(x.lien))}" target="_blank" rel="noopener">Ouvrir l’itinéraire</a>` : ''}</section>`).join('')}</div>`;
+  $('#list').innerHTML = ann + `${ed ? '<p class="note">Ces rubriques sont visibles par les retraitants confirmés, dans cet ordre. Une rubrique vide ne leur est pas montrée.</p>' : ''}<div class="infos">${shown.map((x, k) => `<section class="info"><div class="ih"><h3>${esc(x.titre)}</h3>${ed ? `<div class="ib"><button class="sm" data-rmove="${k}:-1" aria-label="Monter"${k ? '' : ' disabled'}>↑</button><button class="sm" data-rmove="${k}:1" aria-label="Descendre"${k < shown.length - 1 ? '' : ' disabled'}>↓</button><button class="sm" data-redit="${esc(x.id)}">Modifier</button></div>` : ''}</div>${x.texte ? `<p>${withTel(x.texte)}</p>` : '<p class="dim">Vide — non montrée aux retraitants.</p>'}${x.lien ? `<a href="${esc(map(x.lien))}" target="_blank" rel="noopener">Ouvrir l’itinéraire</a>` : ''}</section>`).join('')}</div>`;
+}
+
+/* ---------- annonces ---------- */
+const annOf = r => [...((r && r.annonces) || [])].sort((a, b) => (b.le || '').localeCompare(a.le || ''));
+const annDate = s => s ? new Date(s).toLocaleString('fr-FR', {weekday:'long', day:'numeric', month:'long', hour:'2-digit', minute:'2-digit'}) : '';
+function seenKey(r) { return 'annonce-vue-' + r.id }
+function markSeen(r) { const a = annOf(r)[0]; if (a) try { localStorage.setItem(seenKey(r), a.le) } catch (e) {} }
+function hasUnread(r) { const a = annOf(r)[0]; if (!a) return false; let s = ''; try { s = localStorage.getItem(seenKey(r)) || '' } catch (e) {} return a.le > s }
+function annBlock(r, ed) {
+  const A = annOf(r);
+  if (ed) return A.length ? `<section class="annadm"><h3 style="font-size:17px">Annonces publiées</h3><ul class="annlist">${A.map(a => `<li><div><span class="dim">${esc(annDate(a.le))}</span><p>${withTel(a.texte)}</p></div><button class="sm danger" data-anndel="${esc(a.id)}">Supprimer</button></li>`).join('')}</ul></section>` : '';
+  if (!A.length) return '';
+  const [a, ...old] = A;
+  return `<section class="annonce" role="status"><h3>Annonce</h3><p class="annmsg">${withTel(a.texte)}</p><p class="anndate">${esc(annDate(a.le))}</p>
+    ${old.length ? `<details><summary>Annonces précédentes (${old.length})</summary>${old.map(o => `<div class="annold"><span class="dim">${esc(annDate(o.le))}</span><p>${withTel(o.texte)}</p></div>`).join('')}</details>` : ''}</section>`;
+}
+async function publishAnn() {
+  const t = $('#anntext'), txt = (t.value || '').trim(); if (!txt) return toast('Écrivez le message de l’annonce.');
+  const b = $('#annpub'); b.disabled = true;
+  try { const L = [...((S.ret && S.ret.annonces) || []), {id: 'a' + Date.now().toString(36), texte: txt, le: new Date().toISOString()}]; await updateDoc(doc(db, 'retraites', S.rid), {annonces: L}); t.value = ''; toast('Annonce publiée.') }
+  catch (x) { toast(dbErr(x)) } b.disabled = false;
 }
 
 function vRet() {
@@ -576,6 +603,8 @@ document.addEventListener('click', async e => {
   if (b.id === 'pvbtn') { S.preview = !S.preview; S.toolsKey = ''; history.replaceState(null, '', location.pathname + location.search); render(); scrollTo({top: 0}); return }
   if (!ADM()) return;
   if (b.dataset.new === 'rubrique') return form('rubrique', null, {});
+  if (b.id === 'annpub') return publishAnn();
+  if (b.dataset.anndel) { if (!b.dataset.ok) { b.dataset.ok = 1; b.textContent = 'Confirmer'; return } b.disabled = true; try { await updateDoc(doc(db, 'retraites', S.rid), {annonces: ((S.ret && S.ret.annonces) || []).filter(a => a.id !== b.dataset.anndel)}); toast('Annonce supprimée.') } catch (x) { toast(dbErr(x)) } return }
   if (b.dataset.new === 'equipe') return S.resp ? form('equipe', null, {role: 'organisateur'}) : toast('Seul le responsable peut ajouter des organisateurs.');
   if (b.dataset.new) { const pre = b.dataset.new === 'inscrits' ? {statut:'Confirmée'} : b.dataset.new === 'programme' ? {date: b.dataset.day || S.ret.debut, type:'Office / prière'} : b.dataset.new === 'chambres' ? {lits: 1, type:'H', pmr:'Non'} : {}; return form(b.dataset.new, null, pre) }
   if (b.dataset.edit) { const [c, id] = b.dataset.edit.split(':'); const src = c === 'retraites' ? S.rets : c === 'equipe' ? S.orgs.map(o => ({...o, email: o.id})) : S[{inscrits:'ins', chambres:'rooms', programme:'prog'}[c]]; const o = src.find(x => x.id === id); return o && form(c, o) }

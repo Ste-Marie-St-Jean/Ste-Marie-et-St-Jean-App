@@ -204,3 +204,21 @@ body{min-height:100vh;min-height:100dvh}
 .ttitle .cc{width:16px;height:16px;flex:none}
 .ttitle .ch{font-family:Cinzel,serif;font-weight:600;font-size:clamp(18px,2.6vw,28px);line-height:1.15;color:#fff;font-variant:small-caps}
 @media(max-width:600px){.topbar{--lg:44px;gap:8px}.ttitle .eb{font-size:9px;letter-spacing:.1em;gap:4px}.ttitle .cc{width:12px;height:12px}.ttitle .ch{font-size:17px}}
+
+/* annonces */
+.annonce{background:var(--band);color:#f6ece0;border-radius:14px;padding:18px 20px;margin:0 0 20px;border:2px solid var(--gold);box-shadow:0 6px 18px #0002}
+.annonce h3{font:600 20px Cinzel,serif;color:var(--gold);letter-spacing:.12em;text-transform:uppercase;margin:0 0 8px}
+.annmsg{font-size:18px;line-height:1.5;margin:0;white-space:pre-line;color:#fff}
+.anndate{font-size:13px;color:#e2cdb8;margin:8px 0 0}
+.annonce details{margin-top:12px;border-top:1px solid #c9a04e55;padding-top:8px}
+.annonce summary{cursor:pointer;color:#f1dcae;font-size:14px;font-weight:600}
+.annold{padding:8px 0;border-bottom:1px solid #c9a04e33}.annold p{margin:2px 0 0;white-space:pre-line}.annold .dim{color:#e2cdb8}
+.annonce .tel{background:#fff8ec}
+.annadm{background:var(--soft);border:1px solid var(--line);border-top:3px solid var(--band);border-radius:12px;padding:16px 18px;margin:0 0 20px}
+.annadm h3{font-size:20px;margin-bottom:4px}
+.annlist{list-style:none;padding:0;margin:14px 0 0}.annlist li{display:flex;gap:12px;justify-content:space-between;align-items:start;padding:10px 0;border-top:1px solid var(--line)}
+.annlist p{margin:2px 0 0;white-space:pre-line}
+.annhome{display:flex;flex-direction:column;gap:2px;background:var(--band);color:#fff;text-decoration:none;border:2px solid var(--gold);border-radius:12px;padding:12px 16px;margin:0 0 16px}
+.annhome b{font:600 14px Cinzel,serif;letter-spacing:.14em;color:var(--gold);text-transform:uppercase}
+.tabbar a{position:relative}
+.tabbar a.dotted::after{content:"";position:absolute;top:8px;right:12px;width:10px;height:10px;border-radius:50%;background:#e8473f;box-shadow:0 0 0 2px var(--band)}
